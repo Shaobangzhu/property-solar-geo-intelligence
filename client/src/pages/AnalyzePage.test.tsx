@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AnalyzePage } from "./AnalyzePage";
 import { geocodeStoredAddress } from "../geocode";
-import { lookupProperty, saveGeocodedProperty } from "../propertyApi";
+import { loadRoofProfile, lookupProperty, saveGeocodedProperty } from "../propertyApi";
 
 vi.mock("../geocode", () => ({ geocodeStoredAddress: vi.fn() }));
 vi.mock("../components/PropertyVisualization", () => ({ PropertyVisualization: () => <div>Visualization</div> }));
@@ -10,6 +10,8 @@ vi.mock("../propertyApi", () => ({
   lookupProperty: vi.fn(),
   saveGeocodedProperty: vi.fn(),
   updatePropertyDetails: vi.fn(),
+  loadRoofProfile: vi.fn(),
+  saveRoofProfile: vi.fn(),
 }));
 
 const property = {
@@ -33,7 +35,10 @@ function submitAddress() {
   fireEvent.click(screen.getByRole("button", { name: "Load / Locate Property" }));
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(loadRoofProfile).mockResolvedValue(null);
+});
 
 describe("Analyze property search", () => {
   it("shows loading then uses a local cache hit without geocoding", async () => {

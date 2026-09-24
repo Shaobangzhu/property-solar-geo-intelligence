@@ -1,23 +1,36 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { PropertyVisualization } from "../components/PropertyVisualization";
+import { RoofProfilePanel } from "../components/RoofProfilePanel";
 import { hasValidCoordinates } from "../components/propertyLocation";
 import { geocodeStoredAddress } from "../geocode";
 import {
   lookupProperty,
+  loadRoofProfile,
   saveGeocodedProperty,
+  saveRoofProfile,
   updatePropertyDetails,
   type Property,
   type PropertyDetails,
+  type RoofProfile,
+  type RoofProfileInput,
 } from "../propertyApi";
+import type { RoofGeometry } from "../roofGeometry";
 
 const plannedSections = [
-  "Roof Profile",
   "Solar System",
   "Sunlight & Shadow",
   "Energy Production",
   "Electricity Bills",
   "Economics",
 ];
+
+type RoofState = {
+  propertyId: string;
+  profile: RoofProfile | null;
+  geometry: RoofGeometry | null;
+  loading: boolean;
+  error: string;
+};
 
 function OptionalDetails({ property, onSaved }: { property: Property; onSaved: (property: Property) => void }) {
   const [propertyType, setPropertyType] = useState(property.propertyType ?? "");
@@ -67,6 +80,44 @@ export function AnalyzePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [roofState, setRoofState] = useState<RoofState | null>(null);
+  const [roofRetry, setRoofRetry] = useState(0);
+  const [roofSketchError, setRoofSketchError] = useState("");
+  const propertyId = property?.id;
+  const currentRoof = roofState?.propertyId === propertyId ? roofState : null;
+  const roofGeometry = currentRoof?.geometry ?? null;
+  const roofLoading = Boolean(propertyId) && (!currentRoof || currentRoof.loading);
+
+  useEffect(() => {
+    if (!propertyId) return;
+    let active = true;
+    setRoofSketchError("");
+    setRoofState({ propertyId, profile: null, geometry: null, loading: true, error: "" });
+    void loadRoofProfile(propertyId).then((profile) => {
+      if (active) setRoofState({
+        propertyId, profile, geometry: profile?.roofGeometryJson ?? null, loading: false, error: "",
+      });
+    }).catch((cause: unknown) => {
+      if (active) setRoofState({
+        propertyId, profile: null, geometry: null, loading: false,
+        error: cause instanceof Error ? cause.message : "Could not load the Roof Profile.",
+      });
+    });
+    return () => { active = false; };
+  }, [propertyId, roofRetry]);
+
+  async function saveCurrentRoof(input: RoofProfileInput) {
+    if (!propertyId) return;
+    const profile = await saveRoofProfile(propertyId, input);
+    setRoofState((previous) => previous && previous.propertyId === propertyId
+      ? { ...previous, profile, geometry: profile.roofGeometryJson } : previous);
+  }
+
+  function updateRoofGeometry(geometry: RoofGeometry | null) {
+    setRoofSketchError("");
+    setRoofState((previous) => previous && previous.propertyId === propertyId && !previous.loading
+      ? { ...previous, geometry } : previous);
+  }
 
   async function locateProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -116,7 +167,10 @@ export function AnalyzePage() {
         {error && <p role="alert" className="error-message">{error}</p>}
       </section>
       <div className="analysis-layout">
-        <PropertyVisualization property={property} />
+        <PropertyVisualization property={property} roofGeometry={roofGeometry}
+          canSketch={Boolean(currentRoof && !currentRoof.loading && !currentRoof.error)}
+          onRoofGeometryChange={updateRoofGeometry} onRoofSketchError={setRoofSketchError}
+          roofSketchError={roofSketchError} />
         <aside className="analysis-sections" aria-label="Analysis sections">
           <section className="section-card" aria-labelledby="property-summary-title">
             <h2 id="property-summary-title">Property Summary</h2>
@@ -130,6 +184,10 @@ export function AnalyzePage() {
               </div>
             ) : <p>No property loaded.</p>}
           </section>
+          <RoofProfilePanel key={propertyId ?? "none"} property={property} profile={currentRoof?.profile ?? null}
+            geometry={roofGeometry} loading={roofLoading} error={currentRoof?.error ?? ""}
+            onRetry={() => setRoofRetry((count) => count + 1)} onSave={saveCurrentRoof}
+            onClearGeometry={() => updateRoofGeometry(null)} />
           {plannedSections.map((section) => <section key={section} className="section-card"><h2>{section}</h2><p>Planned</p></section>)}
         </aside>
       </div>

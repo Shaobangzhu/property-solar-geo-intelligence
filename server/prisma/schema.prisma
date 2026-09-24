@@ -19,4 +19,18 @@ model Property {
   lotSizeSqFt      Decimal? @db.Decimal(12, 2)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  roofProfile      RoofProfile?
+}
+
+model RoofProfile {
+  id                     String   @id @default(cuid())
+  propertyId             String   @unique
+  property               Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  usableAreaSqFt         Decimal? @db.Decimal(12, 2)
+  tiltDegrees            Decimal  @db.Decimal(5, 2)
+  azimuthDegrees         Decimal  @db.Decimal(5, 2)
+  estimatedShadingFactor Decimal? @db.Decimal(4, 3)
+  roofGeometryJson       Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 }

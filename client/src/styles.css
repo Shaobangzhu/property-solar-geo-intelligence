@@ -19,6 +19,17 @@ nav { display: flex; gap: 1rem; } nav a { color: #506058; text-decoration: none;
 .geo-canvas { height: 510px; position: relative; }
 .geo-canvas arcgis-map, .geo-canvas arcgis-scene { display: block; height: 100%; width: 100%; }
 .geo-target-label { background: #fff; border-radius: .35rem; bottom: 1rem; box-shadow: 0 1px 8px #10201533; color: #8e2d17; font-size: .8rem; font-weight: 700; left: 1rem; padding: .45rem .6rem; pointer-events: none; position: absolute; }
+.geo-target-label span { display: block; }
+.geo-roof-label { color: #006f65; margin-top: .2rem; }
+.geo-sketch-error { color: #a32626; margin: 0; padding: .55rem 1rem; }
+.roof-profile-panel .assumption-label { color: #315c37; font-weight: 700; margin-top: .55rem; }
+.roof-form { border-top: 1px solid #dbe4db; display: grid; gap: .7rem; margin-top: .8rem; padding-top: .8rem; }
+.roof-form label { display: grid; font-size: .85rem; gap: .25rem; }
+.roof-form input { border: 1px solid #b8c7ba; border-radius: .35rem; font: inherit; padding: .45rem; width: 100%; }
+.roof-form button { background: #3b6d41; border: 0; border-radius: .35rem; color: #fff; cursor: pointer; justify-self: start; padding: .6rem .8rem; }
+.roof-form button:disabled { opacity: .6; }
+.roof-outline-status { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; justify-content: space-between; }
+.roof-outline-status button { background: #edf2ec; color: #244d2c; }
 .geo-fallback { align-items: center; background: linear-gradient(135deg, #d9ead1, #eaf2e7); color: #355d3d; display: flex; flex-direction: column; justify-content: center; min-height: 510px; padding: 1.5rem; text-align: center; }
 .geo-fallback button { background: #3b6d41; border: 0; border-radius: .35rem; color: #fff; cursor: pointer; padding: .6rem .8rem; }
 @media (max-width: 760px) { .site-header { padding: 1rem; }.page { padding: 1rem; }.analysis-layout { grid-template-columns: 1fr; }.geo-canvas { height: 320px; }.geo-fallback { min-height: 320px; }.search-row { flex-direction: column; } }

@@ -2,6 +2,12 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { PropertyRecord, PropertyStore } from "../src/properties.js";
+import type { RoofProfileStore } from "../src/roofProfiles.js";
+
+const roofs: RoofProfileStore = {
+  getForProperty: async () => ({ propertyExists: false, roofProfile: null }),
+  saveForProperty: async () => null,
+};
 
 const property: PropertyRecord = {
   id: "property-1",
@@ -41,7 +47,7 @@ function mockStore(): PropertyStore {
 describe("property API", () => {
   it("rejects invalid address input before a database lookup", async () => {
     const store = mockStore();
-    const response = await request(createApp(store))
+    const response = await request(createApp(store, roofs))
       .post("/api/properties/lookup")
       .send({ address: "  " });
     expect(response.status).toBe(400);
@@ -51,7 +57,7 @@ describe("property API", () => {
   it("returns a local hit for a normalized address", async () => {
     const store = mockStore();
     await store.createIfAbsent(property);
-    const response = await request(createApp(store))
+    const response = await request(createApp(store, roofs))
       .post("/api/properties/lookup")
       .send({ address: "  380  NEW YORK ST, REDLANDS CA " });
     expect(response.status).toBe(200);
@@ -60,7 +66,7 @@ describe("property API", () => {
 
   it("reports a local miss", async () => {
     const store = mockStore();
-    const response = await request(createApp(store))
+    const response = await request(createApp(store, roofs))
       .post("/api/properties/lookup")
       .send({ address: "380 New York St, Redlands CA" });
     expect(response.body).toEqual({ found: false, property: null });
@@ -68,7 +74,7 @@ describe("property API", () => {
 
   it("does not create a duplicate for the same normalized input", async () => {
     const store = mockStore();
-    const app = createApp(store);
+    const app = createApp(store, roofs);
     const geocode = {
       requestedAddress: "380 New York St, Redlands CA",
       displayAddress: property.displayAddress,
@@ -89,7 +95,7 @@ describe("property API", () => {
     { latitude: "34.055", longitude: -117.182 },
   ])("rejects invalid coordinates: %j", async (coordinates) => {
     const store = mockStore();
-    const response = await request(createApp(store)).post("/api/properties").send({
+    const response = await request(createApp(store, roofs)).post("/api/properties").send({
       requestedAddress: property.displayAddress,
       displayAddress: property.displayAddress,
       ...coordinates,
@@ -101,7 +107,7 @@ describe("property API", () => {
   it("saves manually entered details", async () => {
     const store = mockStore();
     await store.createIfAbsent(property);
-    const response = await request(createApp(store)).patch(`/api/properties/${property.id}`).send({
+    const response = await request(createApp(store, roofs)).patch(`/api/properties/${property.id}`).send({
       propertyType: "Single-family",
       yearBuilt: 1980,
       livingAreaSqFt: 2100,

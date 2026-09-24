@@ -1,3 +1,5 @@
+import type { RoofGeometry } from "./roofGeometry";
+
 export type Property = {
   id: string;
   normalizedAddress: string;
@@ -14,13 +16,28 @@ export type Property = {
 
 export type PropertyDetails = Pick<Property, "propertyType" | "yearBuilt" | "livingAreaSqFt" | "lotSizeSqFt">;
 
-async function sendJson<T>(path: string, body: unknown, method = "POST"): Promise<T> {
+export type RoofProfileInput = {
+  usableAreaSqFt: number | null;
+  tiltDegrees: number;
+  azimuthDegrees: number;
+  estimatedShadingFactor: number | null;
+  roofGeometryJson: RoofGeometry | null;
+};
+
+export type RoofProfile = RoofProfileInput & {
+  id: string;
+  propertyId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+async function sendJson<T>(path: string, body?: unknown, method = "POST"): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
       method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
     throw new Error("The local property service is unavailable. Check that the server is running.");
@@ -54,4 +71,18 @@ export async function saveGeocodedProperty(input: {
 export async function updatePropertyDetails(id: string, details: PropertyDetails): Promise<Property> {
   const result = await sendJson<{ property: Property }>(`/api/properties/${encodeURIComponent(id)}`, details, "PATCH");
   return result.property;
+}
+
+export async function loadRoofProfile(propertyId: string): Promise<RoofProfile | null> {
+  const result = await sendJson<{ roofProfile: RoofProfile | null }>(
+    `/api/properties/${encodeURIComponent(propertyId)}/roof-profile`, undefined, "GET",
+  );
+  return result.roofProfile;
+}
+
+export async function saveRoofProfile(propertyId: string, input: RoofProfileInput): Promise<RoofProfile> {
+  const result = await sendJson<{ roofProfile: RoofProfile }>(
+    `/api/properties/${encodeURIComponent(propertyId)}/roof-profile`, input, "PUT",
+  );
+  return result.roofProfile;
 }

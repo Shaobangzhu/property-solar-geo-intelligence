@@ -2,6 +2,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { z } from "zod";
 import { normalizeAddress } from "./address.js";
 import type { PropertyStore } from "./properties.js";
+import { roofProfileInputSchema, type RoofProfileStore } from "./roofProfiles.js";
 
 const addressSchema = z.string().trim().min(5).max(200);
 const lookupSchema = z.object({ address: addressSchema }).strict();
@@ -19,7 +20,7 @@ const detailsSchema = z.object({
   lotSizeSqFt: z.number().finite().positive().max(100_000_000).nullable(),
 }).strict();
 
-export function createApp(properties: PropertyStore) {
+export function createApp(properties: PropertyStore, roofProfiles: RoofProfileStore) {
   const app = express();
   app.use(express.json());
 
@@ -63,6 +64,29 @@ export function createApp(properties: PropertyStore) {
       return;
     }
     response.json({ property });
+  });
+
+  app.get("/api/properties/:id/roof-profile", async (request, response) => {
+    const result = await roofProfiles.getForProperty(String(request.params.id));
+    if (!result.propertyExists) {
+      response.status(404).json({ error: "Property not found." });
+      return;
+    }
+    response.json({ roofProfile: result.roofProfile });
+  });
+
+  app.put("/api/properties/:id/roof-profile", async (request, response) => {
+    const parsed = roofProfileInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Check the roof assumptions and polygon outline, then try again." });
+      return;
+    }
+    const roofProfile = await roofProfiles.saveForProperty(String(request.params.id), parsed.data);
+    if (!roofProfile) {
+      response.status(404).json({ error: "Property not found." });
+      return;
+    }
+    response.json({ roofProfile });
   });
 
   app.use((_request, response) => {

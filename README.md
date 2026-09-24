@@ -2,9 +2,9 @@
 
 Local-first Web GIS Proof of Concept for evaluating rooftop solar potential for one residential property at a time.
 
-## Current scope: M2.5 Dedicated Local Database
+## Current scope: M3 Simplified Roof Profile
 
-The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. Roof Profile and PVWatts production modeling are planned for later milestones.
+The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. A Roof Profile stores user-adjustable planning assumptions and an optional visual roof outline. Sunlight analysis and PVWatts modeling are planned for later milestones.
 
 ### Prerequisites
 
@@ -34,7 +34,7 @@ docker compose logs postgres
 npm run prisma:migrate:deploy
 ```
 
-Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the existing Property migration; do not create the tables manually.
+Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the Property and RoofProfile migrations; do not create the tables manually.
 
 For normal development, run `docker compose up -d postgres` first, `npm --prefix server run dev` in one terminal, and `npm --prefix client run dev` in another. The database survives Express, Vite, and container restarts.
 
@@ -66,3 +66,7 @@ Run the migration before searching properties. The frontend runs at Vite's defau
 Enter a full street address, city, and state on `/analyze`. On a local miss, the browser calls the [ArcGIS Geocoding service](https://developers.arcgis.com/rest/geocode/find-address-candidates/) with `forStorage=true`, then saves one address-level result. Ambiguous or imprecise matches are not saved. Optional property details are manual entries.
 
 The visualization offers exactly two modes: **Map** and **3D**. The 3D scene uses ArcGIS world elevation and an oblique camera. The marker identifies the saved address coordinates; it is not a surveyed roof position or a detailed house model. The browser creates one ArcGIS view per active mode, updates the marker and camera when the property changes, and releases the view when the mode is switched or the page is unmounted.
+
+The **Roof Profile** panel loads the current profile for each property and lets you enter usable roof area, tilt, azimuth, and an optional shading factor. Azimuth is clockwise from north; shading is a 0–1 fraction of estimated sunlight loss. Tilt must be 0–90 degrees, and azimuth must be at least 0 and less than 360 degrees. Use **Save Roof Profile** to create or update it. `GET /api/properties/:id/roof-profile` loads the profile; `PUT /api/properties/:id/roof-profile` validates and saves it. Each property has at most one current profile.
+
+Optionally, choose the polygon tool in **Map** mode to draw one roof outline, then save the Roof Profile. The outline is stored as WGS84 GeoJSON and appears in Map and 3D. The 3D overlay follows visible scene surfaces for legibility. It is a planning visualization only: neither its area nor its vertical placement is an engineering measurement. Enter usable area separately based on your own assumption. **Remove outline** clears the draft; save again to persist the removal.

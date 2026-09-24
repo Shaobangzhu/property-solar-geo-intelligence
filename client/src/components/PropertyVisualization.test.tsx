@@ -2,15 +2,19 @@ import { StrictMode } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Property } from "../propertyApi";
+import type { RoofGeometry } from "../roofGeometry";
 import { PropertyVisualization } from "./PropertyVisualization";
 
 vi.mock("./ArcgisCanvas", () => ({
-  default: ({ mode, property, onError }: {
+  default: ({ mode, property, roofGeometry, canSketch, onError }: {
     mode: "map" | "3d";
     property: Property;
+    roofGeometry: RoofGeometry | null;
+    canSketch: boolean;
     onError: () => void;
   }) => (
-    <div data-testid="arcgis-canvas" data-mode={mode} data-property-id={property.id}>
+    <div data-testid="arcgis-canvas" data-mode={mode} data-property-id={property.id}
+      data-roof-outline={Boolean(roofGeometry)} data-sketch-enabled={canSketch}>
       <span>{property.displayAddress}</span>
       <button type="button" onClick={onError}>Simulate ArcGIS failure</button>
     </div>
@@ -56,6 +60,20 @@ describe("PropertyVisualization", () => {
     fireEvent.click(screen.getByRole("button", { name: "Map" }));
     expect(screen.getByRole("button", { name: "Map" })).toHaveAttribute("aria-pressed", "true");
     expect(await screen.findByTestId("arcgis-canvas")).toHaveAttribute("data-mode", "map");
+  });
+
+  it("carries the saved outline into both modes", async () => {
+    const roofGeometry: RoofGeometry = {
+      type: "Polygon", coordinates: [[[-117.182, 34.055], [-117.1819, 34.055],
+        [-117.1819, 34.0551], [-117.182, 34.055]]],
+    };
+    render(<PropertyVisualization property={property} roofGeometry={roofGeometry} canSketch />);
+    expect(await screen.findByTestId("arcgis-canvas")).toHaveAttribute("data-roof-outline", "true");
+    expect(screen.getByTestId("arcgis-canvas")).toHaveAttribute("data-sketch-enabled", "true");
+    fireEvent.click(screen.getByRole("button", { name: "3D" }));
+    expect(await screen.findByTestId("arcgis-canvas")).toHaveAttribute("data-roof-outline", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    expect(await screen.findByTestId("arcgis-canvas")).toHaveAttribute("data-roof-outline", "true");
   });
 
   it("uses fallback UI when the property has no valid coordinates", () => {

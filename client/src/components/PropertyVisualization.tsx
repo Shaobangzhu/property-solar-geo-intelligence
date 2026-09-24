@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useState, type ReactNode } from "react";
 import type { Property } from "../propertyApi";
 import { hasValidCoordinates } from "./propertyLocation";
+import type { RoofGeometry } from "../roofGeometry";
 
 const ArcgisCanvas = lazy(() => import("./ArcgisCanvas"));
 type Mode = "map" | "3d";
@@ -21,7 +22,15 @@ class ArcgisErrorBoundary extends Component<{ children: ReactNode; onError: () =
   }
 }
 
-export function PropertyVisualization({ property }: { property: Property | null }) {
+export function PropertyVisualization({ property, roofGeometry = null, canSketch = false,
+  onRoofGeometryChange, onRoofSketchError, roofSketchError = "" }: {
+  property: Property | null;
+  roofGeometry?: RoofGeometry | null;
+  canSketch?: boolean;
+  onRoofGeometryChange?: (geometry: RoofGeometry | null) => void;
+  onRoofSketchError?: (message: string) => void;
+  roofSketchError?: string;
+}) {
   const [mode, setMode] = useState<Mode>("map");
   const [failedTarget, setFailedTarget] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -44,6 +53,7 @@ export function PropertyVisualization({ property }: { property: Property | null 
           <button type="button" aria-pressed={mode === "3d"} onClick={() => chooseMode("3d")}>3D</button>
         </div>
       </div>
+      {roofSketchError && <p role="alert" className="geo-sketch-error">{roofSketchError}</p>}
       {!property ? (
         <div className="geo-fallback">Locate a property to see it on the map.</div>
       ) : !hasValidCoordinates(property) ? (
@@ -58,7 +68,9 @@ export function PropertyVisualization({ property }: { property: Property | null 
       ) : (
         <ArcgisErrorBoundary key={`${mode}-${retry}`} onError={() => setFailedTarget(targetKey)}>
           <Suspense fallback={<div className="geo-fallback" role="status">Loading ArcGIS {mode === "map" ? "map" : "3D scene"}…</div>}>
-            <ArcgisCanvas mode={mode} property={property} onError={() => setFailedTarget(targetKey)} />
+            <ArcgisCanvas mode={mode} property={property} roofGeometry={roofGeometry} canSketch={canSketch}
+              onRoofGeometryChange={onRoofGeometryChange} onRoofSketchError={onRoofSketchError}
+              onError={() => setFailedTarget(targetKey)} />
           </Suspense>
         </ArcgisErrorBoundary>
       )}
