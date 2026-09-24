@@ -2,25 +2,49 @@
 
 Local-first Web GIS Proof of Concept for evaluating rooftop solar potential for one residential property at a time.
 
-## Current scope: M2 Property Map and 3D Scene
+## Current scope: M2.5 Dedicated Local Database
 
 The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. Roof Profile and PVWatts production modeling are planned for later milestones.
 
 ### Prerequisites
 
 - Node.js 24 or later
-- A local PostgreSQL database for Prisma migrations and future persistence
+- Docker with the Docker Compose plugin for the dedicated local PostgreSQL database
 
 ### Configure environment variables
 
-Copy the examples and set local values. Do not commit the resulting `.env` files.
+Copy the examples if the local files do not already exist, then set local values. Do not commit the resulting `.env` files.
 
 ```sh
-cp client/.env.example client/.env
-cp server/.env.example server/.env
+cp -n .env.example .env
+cp -n client/.env.example client/.env
+cp -n server/.env.example server/.env
 ```
 
-Set `server/.env` `DATABASE_URL` to the local PostgreSQL connection string. Set `client/.env` `VITE_ARCGIS_API_KEY` to an ArcGIS API key with **stored geocoding**, basemap, and elevation privileges. `PVWATTS_API_KEY` is reserved for a later backend-only integration and is not used in M2. The two `.env` files are ignored by Git.
+Set `PSGI_POSTGRES_USER` and `PSGI_POSTGRES_PASSWORD` in the repository-root `.env`. Use a credential dedicated to this project. Set `server/.env` `DATABASE_URL` with the same user and password, using `postgresql://<user>:<password>@127.0.0.1:5433/property_solar_geo_intelligence?schema=public`. Set `client/.env` `VITE_ARCGIS_API_KEY` to an ArcGIS API key with **stored geocoding**, basemap, and elevation privileges. `PVWATTS_API_KEY` is reserved for a later backend-only integration. All real `.env` files are ignored by Git.
+
+## Local Database
+
+PostgreSQL runs in Docker as **`psgi-postgresql`**, using the **`property_solar_geo_intelligence`** database and Docker named volume **`psgi_postgres_data`**. It listens on container port 5432 and local host port **5433** (`127.0.0.1:5433`). The volume survives `docker compose down` and normal container recreation. This project does **not** reuse the Chaoran Property Intelligence PostgreSQL instance.
+
+```sh
+docker compose up -d postgres
+docker compose ps
+docker compose logs postgres
+npm run prisma:migrate:deploy
+```
+
+Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the existing Property migration; do not create the tables manually.
+
+For normal development, run `docker compose up -d postgres` first, `npm --prefix server run dev` in one terminal, and `npm --prefix client run dev` in another. The database survives Express, Vite, and container restarts.
+
+Stop the database without deleting its data:
+
+```sh
+docker compose down
+```
+
+**`docker compose down -v` deletes the PostgreSQL volume and its data**; use it only to intentionally reset the local database. Database exports and data directories must not be committed.
 
 ### Commands
 

@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16.15
+    container_name: psgi-postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: property_solar_geo_intelligence
+      POSTGRES_USER: ${PSGI_POSTGRES_USER:?Set PSGI_POSTGRES_USER in the repository .env}
+      POSTGRES_PASSWORD: ${PSGI_POSTGRES_PASSWORD:?Set PSGI_POSTGRES_PASSWORD in the repository .env}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - psgi_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  psgi_postgres_data:
+    name: psgi_postgres_data

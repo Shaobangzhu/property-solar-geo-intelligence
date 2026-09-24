@@ -70,6 +70,15 @@ web_modules/
 .env.*
 !.env.example
 
+# Local PostgreSQL files and exports (the Compose volume lives in Docker)
+postgres-data/
+*.dump
+*.pgdump
+*.backup
+*.sql
+!server/prisma/migrations/**/migration.sql
+*.sql.gz
+
 # TypeScript server output
 server/dist/
 
