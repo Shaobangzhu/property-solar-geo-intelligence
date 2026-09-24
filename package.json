@@ -1,0 +1,17 @@
+{
+  "name": "property-solar-geo-intelligence",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "concurrently \"npm --prefix client run dev\" \"npm --prefix server run dev\"",
+    "typecheck": "npm --prefix client run typecheck && npm --prefix server run typecheck",
+    "lint": "npm --prefix client run lint && npm --prefix server run lint",
+    "test": "npm --prefix client run test && npm --prefix server run test",
+    "build": "npm --prefix client run build && npm --prefix server run build",
+    "prisma:validate": "npm --prefix server run prisma:validate",
+    "prisma:migrate:deploy": "npm --prefix server run prisma:migrate:deploy"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
