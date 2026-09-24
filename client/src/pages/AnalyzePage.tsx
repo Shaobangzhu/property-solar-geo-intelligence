@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { PropertyVisualization } from "../components/PropertyVisualization";
+import { hasValidCoordinates } from "../components/propertyLocation";
 import { geocodeStoredAddress } from "../geocode";
 import {
   lookupProperty,
@@ -74,7 +76,6 @@ export function AnalyzePage() {
       return;
     }
     setLoading(true);
-    setProperty(null);
     setError("");
     setNotice("Checking local properties…");
     try {
@@ -115,17 +116,16 @@ export function AnalyzePage() {
         {error && <p role="alert" className="error-message">{error}</p>}
       </section>
       <div className="analysis-layout">
-        <section className="map-placeholder" aria-label="ArcGIS Map / 3D placeholder">
-          <span>ArcGIS Map / 3D</span>
-          <p>Spatial visualization is planned for M2.</p>
-        </section>
+        <PropertyVisualization property={property} />
         <aside className="analysis-sections" aria-label="Analysis sections">
           <section className="section-card" aria-labelledby="property-summary-title">
             <h2 id="property-summary-title">Property Summary</h2>
             {property ? (
               <div>
                 <p className="property-address">{property.displayAddress}</p>
-                <p>Coordinates: {property.latitude.toFixed(6)}, {property.longitude.toFixed(6)}</p>
+                <p>Coordinates: {hasValidCoordinates(property)
+                  ? `${property.latitude.toFixed(6)}, ${property.longitude.toFixed(6)}`
+                  : "Unavailable"}</p>
                 <OptionalDetails key={property.id} property={property} onSaved={setProperty} />
               </div>
             ) : <p>No property loaded.</p>}

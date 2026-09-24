@@ -5,6 +5,7 @@ import { geocodeStoredAddress } from "../geocode";
 import { lookupProperty, saveGeocodedProperty } from "../propertyApi";
 
 vi.mock("../geocode", () => ({ geocodeStoredAddress: vi.fn() }));
+vi.mock("../components/PropertyVisualization", () => ({ PropertyVisualization: () => <div>Visualization</div> }));
 vi.mock("../propertyApi", () => ({
   lookupProperty: vi.fn(),
   saveGeocodedProperty: vi.fn(),

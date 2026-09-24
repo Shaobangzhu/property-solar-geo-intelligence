@@ -11,6 +11,9 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
+    "@arcgis/core": "5.1",
+    "@arcgis/map-components": "5.1",
+    "@esri/calcite-components": "^5.1.2",
     "@vitejs/plugin-react": "^5.0.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
