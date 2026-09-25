@@ -6,6 +6,8 @@ import { roofProfileInputSchema, type RoofProfileStore } from "./roofProfiles.js
 import { SolarEstimateError, solarEstimateInputsSchema, type SolarEstimateInputs, type SolarEstimateResult } from "./pvwatts.js";
 import { solarSystemInputSchema, type SolarSystemStore } from "./solarSystems.js";
 import { billYearSchema, monthlyBillsInputSchema, type MonthlyBillsStore } from "./monthlyBills.js";
+import { consumptionInputSchema, type ConsumptionStore } from "./consumption.js";
+import { hasCurrentTariff, type TariffVersion } from "./economics.js";
 
 const addressSchema = z.string().trim().min(5).max(200);
 const lookupSchema = z.object({ address: addressSchema }).strict();
@@ -28,8 +30,13 @@ export type SolarApiDependencies = {
   estimate: (inputs: SolarEstimateInputs) => Promise<SolarEstimateResult>;
 };
 
+export type EconomicsApiDependencies = {
+  consumption: ConsumptionStore;
+  tariffCatalog: TariffVersion[];
+};
+
 export function createApp(properties: PropertyStore, roofProfiles: RoofProfileStore,
-  solar?: SolarApiDependencies, monthlyBills?: MonthlyBillsStore) {
+  solar?: SolarApiDependencies, monthlyBills?: MonthlyBillsStore, economics?: EconomicsApiDependencies) {
   const app = express();
   app.use(express.json());
 
@@ -159,6 +166,31 @@ export function createApp(properties: PropertyStore, roofProfiles: RoofProfileSt
     const result = await monthlyBills.save(String(request.params.id), parsed.data);
     if (!result) { response.status(404).json({ error: "Property not found." }); return; }
     response.json(result);
+  });
+
+  app.get("/api/properties/:id/consumption", async (request, response) => {
+    if (!economics) { response.status(503).json({ error: "Consumption assumptions are unavailable." }); return; }
+    const result = await economics.consumption.getForProperty(String(request.params.id));
+    if (!result.propertyExists) { response.status(404).json({ error: "Property not found." }); return; }
+    response.json({ consumption: result.consumption });
+  });
+
+  app.put("/api/properties/:id/consumption", async (request, response) => {
+    if (!economics) { response.status(503).json({ error: "Consumption assumptions are unavailable." }); return; }
+    const parsed = consumptionInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Enter a valid annual household consumption in kWh." });
+      return;
+    }
+    const consumption = await economics.consumption.saveForProperty(String(request.params.id), parsed.data);
+    if (!consumption) { response.status(404).json({ error: "Property not found." }); return; }
+    response.json({ consumption });
+  });
+
+  app.get("/api/economics/tariff-status", (_request, response) => {
+    response.json({ configured: economics
+      ? hasCurrentTariff(economics.tariffCatalog, new Date().toISOString().slice(0, 10))
+      : false });
   });
 
   app.use((_request, response) => {

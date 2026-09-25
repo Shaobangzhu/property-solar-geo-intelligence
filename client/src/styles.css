@@ -75,6 +75,16 @@ nav { display: flex; gap: 1rem; } nav a { color: #506058; text-decoration: none;
 .bill-currency-input input { border: 0; font: inherit; min-width: 0; padding: .5rem .45rem; width: 100%; }
 .bill-modal-actions { display: flex; gap: .55rem; justify-content: flex-end; margin-top: 1rem; }
 .bill-modal-actions .bill-cancel { background: #edf2ec; color: #244d2c; }
+.economics-heading { align-items: center; display: flex; gap: .5rem; }
+.economics-heading span { background: #e7f0e6; border-radius: 999px; color: #315c37; font-size: .7rem; font-weight: 700; padding: .2rem .45rem; }
+.consumption-form { border-top: 1px solid #dbe4db; display: grid; gap: .55rem; margin-top: .8rem; padding-top: .8rem; }
+.consumption-form label { display: grid; font-size: .85rem; gap: .25rem; }
+.consumption-form input { border: 1px solid #b8c7ba; border-radius: .35rem; font: inherit; padding: .45rem; width: 100%; }
+.consumption-form button, .economics-panel button { background: #3b6d41; border: 0; border-radius: .35rem; color: #fff; cursor: pointer; justify-self: start; padding: .6rem .8rem; }
+.consumption-form button:disabled { cursor: not-allowed; opacity: .6; }
+.tariff-empty-state { background: #f4f6f3; border-radius: .5rem; margin-top: 1rem; padding: .8rem; }
+.tariff-empty-state strong { font-size: .88rem; }
+.tariff-empty-state p { margin-top: .35rem; }
 .geo-fallback { align-items: center; background: linear-gradient(135deg, #d9ead1, #eaf2e7); color: #355d3d; display: flex; flex-direction: column; justify-content: center; min-height: 510px; padding: 1.5rem; text-align: center; }
 .geo-fallback button { background: #3b6d41; border: 0; border-radius: .35rem; color: #fff; cursor: pointer; padding: .6rem .8rem; }
 @media (max-width: 760px) { .site-header { padding: 1rem; }.page { padding: 1rem; }.analysis-layout { grid-template-columns: 1fr; }.geo-canvas { height: 320px; }.geo-fallback { min-height: 320px; }.search-row { flex-direction: column; } }

@@ -57,6 +57,14 @@ export type SolarEstimateResult = { estimate: SolarProductionEstimate; warnings:
 
 export type MonthlyBillYear = { year: number; monthlyAmounts: number[] | null };
 
+export type HouseholdConsumption = {
+  id: string;
+  propertyId: string;
+  annualConsumptionKwh: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 async function sendJson<T>(path: string, body?: unknown, method = "POST"): Promise<T> {
   let response: Response;
   try {
@@ -142,4 +150,23 @@ export async function saveMonthlyBills(propertyId: string, year: number,
   return sendJson<MonthlyBillYear>(
     `/api/properties/${encodeURIComponent(propertyId)}/electricity-bills`, { year, monthlyAmounts }, "PUT",
   );
+}
+
+export async function loadHouseholdConsumption(propertyId: string): Promise<HouseholdConsumption | null> {
+  const result = await sendJson<{ consumption: HouseholdConsumption | null }>(
+    `/api/properties/${encodeURIComponent(propertyId)}/consumption`, undefined, "GET",
+  );
+  return result.consumption;
+}
+
+export async function saveHouseholdConsumption(propertyId: string,
+  annualConsumptionKwh: number): Promise<HouseholdConsumption> {
+  const result = await sendJson<{ consumption: HouseholdConsumption }>(
+    `/api/properties/${encodeURIComponent(propertyId)}/consumption`, { annualConsumptionKwh }, "PUT",
+  );
+  return result.consumption;
+}
+
+export async function loadTariffStatus(): Promise<{ configured: boolean }> {
+  return sendJson<{ configured: boolean }>("/api/economics/tariff-status", undefined, "GET");
 }

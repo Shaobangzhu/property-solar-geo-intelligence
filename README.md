@@ -2,9 +2,9 @@
 
 Local-first Web GIS Proof of Concept for evaluating rooftop solar potential for one residential property at a time.
 
-## Current scope: M4 Sunlight & Shadow Experience
+## Current scope: M7A Utility Economics Architecture
 
-The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. A Roof Profile stores user-adjustable planning assumptions and an optional visual roof outline. The Sunlight & Shadow panel lets you visually explore the 3D scene at different dates and times. Solar production and PVWatts modeling are planned for later milestones.
+The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. A Roof Profile stores user-adjustable planning assumptions and an optional visual roof outline. The Sunlight & Shadow panel lets you visually explore the 3D scene at different dates and times. PVWatts estimates monthly solar generation, and historical bill entry records actual monthly bill dollars. The Economics panel records a separate annual household consumption assumption and waits for verified tariff and time-aligned energy data before showing any dollar estimate.
 
 ### Prerequisites
 
@@ -34,7 +34,7 @@ docker compose logs postgres
 npm run prisma:migrate:deploy
 ```
 
-Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the Property, RoofProfile, SolarSystemConfiguration, and MonthlyElectricityBill migrations; do not create the tables manually.
+Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the Property, RoofProfile, SolarSystemConfiguration, MonthlyElectricityBill, and HouseholdConsumption migrations; do not create the tables manually.
 
 For normal development, run `docker compose up -d postgres` first, `npm --prefix server run dev` in one terminal, and `npm --prefix client run dev` in another. The database survives Express, Vite, and container restarts.
 
@@ -82,3 +82,5 @@ In **Solar System**, select a generic 4 kW, 7 kW, or 10 kW preset, or enter a cu
 In **Historical Electricity Bill & Solar Value**, choose a bill year and click **Enter Monthly Bills**. Enter January through December in USD; blank fields save as $0.00. Saving updates all twelve months in one database transaction. Reopen the modal or reload the property and year to edit existing values. The gray chart displays only saved historical bills, with a zero-height bar for a $0 month. It does not calculate solar value or utility-specific economics. `GET /api/properties/:id/electricity-bills?year=YYYY` loads a year, and `PUT /api/properties/:id/electricity-bills` saves `{ "year": YYYY, "monthlyAmounts": [12 numbers] }`.
 
 To run the optional local PostgreSQL integrity test after applying migrations, use `RUN_DB_TESTS=1 npm --prefix server run test -- monthlyBills.db.test.ts`. It creates and deletes a temporary property and checks monthly uniqueness and transaction rollback.
+
+The **Economics Estimate** panel records one annual household consumption assumption in kWh per property through `GET` and `PUT /api/properties/:id/consumption`. It never derives kWh from historical bill dollars. Historical bills, household consumption, PVWatts generation, self-consumption, grid imports, and grid exports remain separate concepts. The tariff domain supports utility and plan identifiers, effective dates and versions, seasons, weekday/weekend time-of-use periods, import rates, and export-credit source/vintage metadata. A future reviewed JSON tariff catalog may be supplied through `TARIFF_CATALOG_PATH` in `server/.env`; no tariff catalog or SCE price values ship with the app. With no complete catalog, `/api/economics/tariff-status` reports unconfigured and the panel says **Tariff data not configured**. Even with a catalog, this phase does not show dollar outputs because annual kWh totals cannot locate use or solar exports in time-of-use periods. The synthetic tariff fixture under `server/test/fixtures/` is **TEST DATA — NOT CURRENT SCE RATES** and is never loaded at runtime.

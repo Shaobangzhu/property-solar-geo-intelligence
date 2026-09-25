@@ -17,4 +17,10 @@ describe("loadConfig", () => {
       PVWATTS_API_KEY: "" });
     expect(config.PVWATTS_API_KEY).toBeUndefined();
   });
+
+  it("treats a blank tariff catalog path as unconfigured", () => {
+    const config = loadConfig({ DATABASE_URL: "postgresql://user:password@localhost:5432/solar",
+      TARIFF_CATALOG_PATH: "" });
+    expect(config.TARIFF_CATALOG_PATH).toBeUndefined();
+  });
 });
