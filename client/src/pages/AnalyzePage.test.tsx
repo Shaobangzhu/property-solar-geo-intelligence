@@ -56,7 +56,10 @@ beforeEach(() => {
   vi.mocked(loadSolarSystem).mockResolvedValue(null);
   vi.mocked(loadMonthlyBills).mockImplementation(async (_propertyId, year) => ({ year, monthlyAmounts: null }));
   vi.mocked(loadHouseholdConsumption).mockResolvedValue(null);
-  vi.mocked(loadTariffStatus).mockResolvedValue({ configured: false });
+  vi.mocked(loadTariffStatus).mockResolvedValue({
+    configured: false, annualEstimateSupported: false, utility: "SCE", planId: "TOU-D-PRIME",
+    verifiedRateInputs: [], missing: [], sources: [],
+  });
 });
 
 describe("Analyze property search", () => {

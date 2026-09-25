@@ -1,5 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { loadHouseholdConsumption, loadTariffStatus, saveHouseholdConsumption } from "../propertyApi";
+import { loadHouseholdConsumption, loadTariffStatus, saveHouseholdConsumption,
+  type TariffStatus } from "../propertyApi";
+
+const unavailableMetrics = [
+  ["Estimated Annual Electricity Cost", "USD"],
+  ["Estimated Solar Value", "USD"],
+  ["Estimated Grid Import", "kWh"],
+  ["Estimated Grid Export", "kWh"],
+  ["Estimated Export Credit", "USD"],
+] as const;
 
 export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
   const [annualText, setAnnualText] = useState("");
@@ -8,15 +17,15 @@ export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
   const [retry, setRetry] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
-  const [tariffConfigured, setTariffConfigured] = useState(false);
+  const [tariffStatus, setTariffStatus] = useState<TariffStatus | null>(null);
   const [tariffLoading, setTariffLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     void loadTariffStatus().then((status) => {
-      if (active) setTariffConfigured(status.configured);
+      if (active) setTariffStatus(status);
     }).catch(() => {
-      if (active) setTariffConfigured(false);
+      if (active) setTariffStatus(null);
     }).finally(() => {
       if (active) setTariffLoading(false);
     });
@@ -83,10 +92,29 @@ export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
             {saveMessage && <p role="status">{saveMessage}</p>}
           </form>}
     {!tariffLoading && <div className="tariff-empty-state" role="status">
-      <strong>{tariffConfigured ? "Economics estimate unavailable" : "Tariff data not configured"}</strong>
-      <p>{tariffConfigured
-        ? "A complete time-aligned household consumption and solar generation profile is required before applying time-of-use rates."
-        : "Verified import rates and export-credit data are required before any dollar estimate can be shown."}</p>
+      <strong>{!tariffStatus ? "Tariff status unavailable"
+        : tariffStatus.configured || tariffStatus.verifiedRateInputs.length
+          ? "Economics estimate unavailable" : "Tariff data not configured"}</strong>
+      <p>Annual kWh and monthly production cannot determine self-consumption or hourly credits. A full estimate also needs the customer's billing details and applicable charge and settlement rules.</p>
+      {tariffStatus && tariffStatus.verifiedRateInputs.length > 0 && <div>
+        <h3>Verified rate inputs</h3>
+        <ul>{tariffStatus.verifiedRateInputs.map((rate) => <li key={rate.component}>
+          {rate.component === "import" ? "Import" : "Export"}: {rate.version}
+          {` (from ${rate.effectiveFrom}${rate.effectiveTo ? ` until ${rate.effectiveTo} (exclusive)` : ""}; reviewed ${rate.verifiedAt})`}
+        </li>)}</ul>
+      </div>}
+      <div className="economics-metrics" aria-label="Unavailable estimates">
+        {unavailableMetrics.map(([label, unit]) => <div className="economics-metric" key={label}>
+          <span>ESTIMATE · {label}</span><strong>Unavailable</strong><small>{unit}</small>
+        </div>)}
+      </div>
+      {tariffStatus && <>
+        <h3>What is needed</h3>
+        <ul>{tariffStatus.missing.map((gap) => <li key={gap}>{gap}</li>)}</ul>
+        <p className="muted">Verified rules: {tariffStatus.sources.map((source, index) => <span key={source.title}>
+          {index > 0 && ", "}<a href={source.url} target="_blank" rel="noreferrer">{source.title}</a>
+        </span>)}.</p>
+      </>}
     </div>}
   </section>;
 }

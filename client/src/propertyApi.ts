@@ -167,6 +167,25 @@ export async function saveHouseholdConsumption(propertyId: string,
   return result.consumption;
 }
 
-export async function loadTariffStatus(): Promise<{ configured: boolean }> {
-  return sendJson<{ configured: boolean }>("/api/economics/tariff-status", undefined, "GET");
+export type TariffStatus = {
+  configured: boolean;
+  annualEstimateSupported: boolean;
+  utility: string;
+  planId: string;
+  verifiedRateInputs: {
+    component: "import" | "export";
+    planId: string;
+    version: string;
+    effectiveFrom: string;
+    effectiveTo: string | null;
+    verifiedAt: string;
+    sourceUrl: string;
+    sourceSha256: string;
+  }[];
+  missing: string[];
+  sources: { title: string; url: string; location: string }[];
+};
+
+export async function loadTariffStatus(): Promise<TariffStatus> {
+  return sendJson<TariffStatus>("/api/economics/tariff-status", undefined, "GET");
 }

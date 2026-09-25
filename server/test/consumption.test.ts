@@ -48,7 +48,9 @@ describe("economics architecture API", () => {
     expect((await request(app).get(path)).body).toEqual(saved.body);
     expect((await request(app).put(path).send({ annualConsumptionKwh: 9000 })).body.consumption.id)
       .toBe(saved.body.consumption.id);
-    expect((await request(app).get("/api/economics/tariff-status")).body).toEqual({ configured: false });
+    expect((await request(app).get("/api/economics/tariff-status")).body).toMatchObject({
+      configured: false, annualEstimateSupported: false, utility: "SCE", planId: "TOU-D-PRIME",
+    });
   });
 
   it.each([{ annualConsumptionKwh: -1 }, { annualConsumptionKwh: 1.234 },
@@ -61,12 +63,14 @@ describe("economics architecture API", () => {
     expect(consumption.saveForProperty).not.toHaveBeenCalled();
   });
 
-  it("returns 404 for an unknown property and reports complete test tariffs as configured", async () => {
+  it("returns 404 for an unknown property and rejects synthetic tariffs as SCE configuration", async () => {
     const app = createApp(properties, roofs, undefined, undefined,
       { consumption: store(), tariffCatalog: [testTariff] });
     expect((await request(app).get("/api/properties/missing/consumption")).status).toBe(404);
     expect((await request(app).put("/api/properties/missing/consumption")
       .send({ annualConsumptionKwh: 0 })).status).toBe(404);
-    expect((await request(app).get("/api/economics/tariff-status")).body).toEqual({ configured: true });
+    expect((await request(app).get("/api/economics/tariff-status")).body).toMatchObject({
+      configured: false, annualEstimateSupported: false,
+    });
   });
 });

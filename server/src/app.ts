@@ -7,7 +7,8 @@ import { SolarEstimateError, solarEstimateInputsSchema, type SolarEstimateInputs
 import { solarSystemInputSchema, type SolarSystemStore } from "./solarSystems.js";
 import { billYearSchema, monthlyBillsInputSchema, type MonthlyBillsStore } from "./monthlyBills.js";
 import { consumptionInputSchema, type ConsumptionStore } from "./consumption.js";
-import { hasCurrentTariff, type TariffVersion } from "./economics.js";
+import type { TariffVersion } from "./economics.js";
+import { getSceTariffStatus } from "./sceTariff.js";
 
 const addressSchema = z.string().trim().min(5).max(200);
 const lookupSchema = z.object({ address: addressSchema }).strict();
@@ -188,9 +189,7 @@ export function createApp(properties: PropertyStore, roofProfiles: RoofProfileSt
   });
 
   app.get("/api/economics/tariff-status", (_request, response) => {
-    response.json({ configured: economics
-      ? hasCurrentTariff(economics.tariffCatalog, new Date().toISOString().slice(0, 10))
-      : false });
+    response.json(getSceTariffStatus(economics?.tariffCatalog ?? [], new Date().toISOString().slice(0, 10)));
   });
 
   app.use((_request, response) => {

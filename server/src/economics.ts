@@ -6,7 +6,7 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).refine((value) => {
   const date = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }, "Use a real calendar date.");
-const dayTypeSchema = z.enum(["weekday", "weekend"]);
+const dayTypeSchema = z.enum(["weekday", "weekend", "holiday"]);
 const ratePeriodSchema = z.object({
   periodId: z.string().min(1),
   seasonId: z.string().min(1),
@@ -25,6 +25,13 @@ export const tariffVersionSchema = z.object({
   timeZone: z.string().min(1),
   sourceUrl: z.string().url(),
   verifiedAt: dateSchema,
+  sourceReferences: z.array(z.object({
+    authority: z.enum(["SCE", "CPUC"]),
+    component: z.enum(["import", "export", "billing"]),
+    title: z.string().min(1),
+    url: z.string().url(),
+    location: z.string().min(1),
+  }).strict()).min(1),
   seasons: z.array(z.object({
     id: z.string().min(1),
     months: z.array(z.number().int().min(1).max(12)).min(1),
@@ -78,20 +85,9 @@ export type EnergyBalance = {
 };
 
 export type IntervalEconomicsTotals = EnergyBalance & {
-  baselineImportCostUsd: number;
-  importCostUsd: number;
-  exportCreditUsd: number;
-  estimatedEnergyCostUsd: number;
-  estimatedSolarValueUsd: number;
-};
-
-export type AnnualEconomicsEstimate = IntervalEconomicsTotals & {
-  year: number;
-  utility: string;
-  planId: string;
-  tariffVersion: string;
-  estimatedAnnualCostUsd: number;
-  estimatedAnnualSolarValueUsd: number;
+  baselineImportEnergyChargeUsd: number;
+  importEnergyChargeUsd: number;
+  grossExportCreditAccrualUsd: number;
 };
 
 function nonnegative(value: number, name: string) {
@@ -139,8 +135,8 @@ export function calculateIntervalEconomics(tariff: TariffVersion,
   const totals: IntervalEconomicsTotals = {
     householdConsumptionKwh: 0, solarGenerationKwh: 0, selfConsumedKwh: 0,
     gridImportsKwh: 0, gridExportsKwh: 0,
-    baselineImportCostUsd: 0, importCostUsd: 0, exportCreditUsd: 0,
-    estimatedEnergyCostUsd: 0, estimatedSolarValueUsd: 0,
+    baselineImportEnergyChargeUsd: 0, importEnergyChargeUsd: 0,
+    grossExportCreditAccrualUsd: 0,
   };
   for (const interval of intervals) {
     const energy = balanceEnergy(interval.householdConsumptionKwh,
@@ -154,12 +150,10 @@ export function calculateIntervalEconomics(tariff: TariffVersion,
     totals.selfConsumedKwh += energy.selfConsumedKwh;
     totals.gridImportsKwh += energy.gridImportsKwh;
     totals.gridExportsKwh += energy.gridExportsKwh;
-    totals.baselineImportCostUsd += energy.householdConsumptionKwh * importRate;
-    totals.importCostUsd += energy.gridImportsKwh * importRate;
-    totals.exportCreditUsd += energy.gridExportsKwh * exportRate;
+    totals.baselineImportEnergyChargeUsd += energy.householdConsumptionKwh * importRate;
+    totals.importEnergyChargeUsd += energy.gridImportsKwh * importRate;
+    totals.grossExportCreditAccrualUsd += energy.gridExportsKwh * exportRate;
   }
-  totals.estimatedEnergyCostUsd = totals.importCostUsd - totals.exportCreditUsd;
-  totals.estimatedSolarValueUsd = totals.baselineImportCostUsd - totals.estimatedEnergyCostUsd;
   return totals;
 }
 
@@ -167,7 +161,7 @@ export function isTariffReady(tariff: TariffVersion): boolean {
   if (tariff.exportCredit.method !== "hourlySchedule") return false;
   try {
     for (let month = 1; month <= 12; month += 1) {
-      for (const dayType of ["weekday", "weekend"] as const) {
+      for (const dayType of ["weekday", "weekend", "holiday"] as const) {
         for (let hour = 0; hour < 24; hour += 1) {
           periodRate(tariff, tariff.importPeriods, month, dayType, hour);
           periodRate(tariff, tariff.exportCredit.periods, month, dayType, hour);

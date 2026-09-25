@@ -35,11 +35,11 @@ describe("synthetic tariff calculations — TEST DATA — NOT CURRENT SCE RATES"
     ]);
     expect(totals).toMatchObject({ householdConsumptionKwh: 15, solarGenerationKwh: 10,
       selfConsumedKwh: 5, gridImportsKwh: 10, gridExportsKwh: 5 });
-    expect(totals.baselineImportCostUsd).toBeCloseTo(2);
-    expect(totals.importCostUsd).toBeCloseTo(1.2);
-    expect(totals.exportCreditUsd).toBeCloseTo(0.25);
-    expect(totals.estimatedEnergyCostUsd).toBeCloseTo(0.95);
-    expect(totals.estimatedSolarValueUsd).toBeCloseTo(1.05);
+    expect(totals.baselineImportEnergyChargeUsd).toBeCloseTo(2);
+    expect(totals.importEnergyChargeUsd).toBeCloseTo(1.2);
+    expect(totals.grossExportCreditAccrualUsd).toBeCloseTo(0.25);
+    expect(totals).not.toHaveProperty("estimatedAnnualCostUsd");
+    expect(totals).not.toHaveProperty("estimatedSolarValueUsd");
   });
 
   it("fails closed if credits or required periods are missing", () => {
@@ -71,6 +71,8 @@ describe("synthetic tariff calculations — TEST DATA — NOT CURRENT SCE RATES"
     expect(isTariffReady(testTariff)).toBe(true);
     expect(isTariffReady({ ...testTariff, exportCredit: { method: "unconfigured" } })).toBe(false);
     expect(isTariffReady({ ...testTariff, importPeriods: testTariff.importPeriods.slice(0, 1) })).toBe(false);
+    expect(isTariffReady({ ...testTariff, importPeriods: testTariff.importPeriods
+      .filter((period) => period.dayType !== "holiday") })).toBe(false);
     expect(loadTariffCatalog(undefined)).toEqual([]);
     expect(hasCurrentTariff([testTariff], "2026-09-25")).toBe(true);
     expect(hasCurrentTariff([{ ...testTariff, effectiveTo: "2026-08-01" }], "2026-09-25"))

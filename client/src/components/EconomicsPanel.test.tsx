@@ -13,11 +13,17 @@ const record = {
   id: "consumption-1", propertyId: "property-1", annualConsumptionKwh: 6200,
   createdAt: "2026-09-25T00:00:00.000Z", updatedAt: "2026-09-25T00:00:00.000Z",
 };
+const tariffStatus = {
+  configured: false, annualEstimateSupported: false, utility: "SCE", planId: "TOU-D-PRIME",
+  verifiedRateInputs: [],
+  missing: ["Current filed import and export prices are unavailable."],
+  sources: [{ title: "SCE Schedule NBT", url: "https://www.sce.com/nbt", location: "Sheet 5" }],
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(loadHouseholdConsumption).mockResolvedValue(null);
-  vi.mocked(loadTariffStatus).mockResolvedValue({ configured: false });
+  vi.mocked(loadTariffStatus).mockResolvedValue(tariffStatus);
   vi.mocked(saveHouseholdConsumption).mockImplementation(async (_propertyId, annualConsumptionKwh) => ({
     ...record, annualConsumptionKwh,
   }));
@@ -29,6 +35,9 @@ describe("EconomicsPanel", () => {
     expect(await screen.findByText("Tariff data not configured")).toBeInTheDocument();
     expect(screen.getByText("Estimate")).toBeInTheDocument();
     expect(screen.getByText(/Dollar bills do not reveal precise kWh consumption/)).toBeInTheDocument();
+    expect(screen.getAllByText("Unavailable")).toHaveLength(5);
+    expect(screen.getByText("Current filed import and export prices are unavailable.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "SCE Schedule NBT" })).toHaveAttribute("href", "https://www.sce.com/nbt");
     expect(screen.queryByText(/\$[0-9]/)).not.toBeInTheDocument();
   });
 
@@ -56,9 +65,23 @@ describe("EconomicsPanel", () => {
   });
 
   it("does not show monetary estimates when tariff data exists but time profiles do not", async () => {
-    vi.mocked(loadTariffStatus).mockResolvedValue({ configured: true });
+    vi.mocked(loadTariffStatus).mockResolvedValue({ ...tariffStatus,
+      verifiedRateInputs: [{ component: "import", planId: "TOU-D-PRIME", version: "Cal. PUC 91200-E",
+        effectiveFrom: "2026-06-25", effectiveTo: null, verifiedAt: "2026-09-25",
+        sourceUrl: "https://www.sce.com/tou-d",
+        sourceSha256: "test-hash" }], missing: ["Hourly usage is needed."],
+    });
     render(<EconomicsPanel propertyId="property-1" />);
     expect(await screen.findByText("Economics estimate unavailable")).toBeInTheDocument();
-    expect(screen.queryByText(/Estimated annual cost/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Import: Cal. PUC 91200-E/)).toBeInTheDocument();
+    expect(screen.getByText(/ESTIMATE · Estimated Annual Electricity Cost/)).toBeInTheDocument();
+    expect(screen.getAllByText("Unavailable")).toHaveLength(5);
+  });
+
+  it("distinguishes a tariff-status request failure from absent tariff data", async () => {
+    vi.mocked(loadTariffStatus).mockRejectedValue(new Error("offline"));
+    render(<EconomicsPanel propertyId="property-1" />);
+    expect(await screen.findByText("Tariff status unavailable")).toBeInTheDocument();
+    expect(screen.getAllByText("Unavailable")).toHaveLength(5);
   });
 });

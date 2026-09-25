@@ -85,6 +85,14 @@ nav { display: flex; gap: 1rem; } nav a { color: #506058; text-decoration: none;
 .tariff-empty-state { background: #f4f6f3; border-radius: .5rem; margin-top: 1rem; padding: .8rem; }
 .tariff-empty-state strong { font-size: .88rem; }
 .tariff-empty-state p { margin-top: .35rem; }
+.tariff-empty-state h3 { font-size: .82rem; margin: 1rem 0 .35rem; }
+.tariff-empty-state ul { margin: 0; padding-left: 1.2rem; }
+.tariff-empty-state li { font-size: .78rem; line-height: 1.5; margin-bottom: .35rem; }
+.economics-metrics { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-top: .9rem; }
+.economics-metric { background: #fff; border: 1px solid #dce5da; border-radius: .4rem; display: flex; flex-direction: column; gap: .18rem; padding: .55rem; }
+.economics-metric span { color: #536557; font-size: .65rem; font-weight: 700; text-transform: uppercase; }
+.economics-metric strong { color: #526154; font-size: .9rem; }
+.economics-metric small { color: #69766c; font-size: .66rem; }
 .geo-fallback { align-items: center; background: linear-gradient(135deg, #d9ead1, #eaf2e7); color: #355d3d; display: flex; flex-direction: column; justify-content: center; min-height: 510px; padding: 1.5rem; text-align: center; }
 .geo-fallback button { background: #3b6d41; border: 0; border-radius: .35rem; color: #fff; cursor: pointer; padding: .6rem .8rem; }
 @media (max-width: 760px) { .site-header { padding: 1rem; }.page { padding: 1rem; }.analysis-layout { grid-template-columns: 1fr; }.geo-canvas { height: 320px; }.geo-fallback { min-height: 320px; }.search-row { flex-direction: column; } }
