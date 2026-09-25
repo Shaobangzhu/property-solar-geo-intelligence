@@ -5,6 +5,7 @@ import type { PropertyStore } from "./properties.js";
 import { roofProfileInputSchema, type RoofProfileStore } from "./roofProfiles.js";
 import { SolarEstimateError, solarEstimateInputsSchema, type SolarEstimateInputs, type SolarEstimateResult } from "./pvwatts.js";
 import { solarSystemInputSchema, type SolarSystemStore } from "./solarSystems.js";
+import { billYearSchema, monthlyBillsInputSchema, type MonthlyBillsStore } from "./monthlyBills.js";
 
 const addressSchema = z.string().trim().min(5).max(200);
 const lookupSchema = z.object({ address: addressSchema }).strict();
@@ -27,7 +28,8 @@ export type SolarApiDependencies = {
   estimate: (inputs: SolarEstimateInputs) => Promise<SolarEstimateResult>;
 };
 
-export function createApp(properties: PropertyStore, roofProfiles: RoofProfileStore, solar?: SolarApiDependencies) {
+export function createApp(properties: PropertyStore, roofProfiles: RoofProfileStore,
+  solar?: SolarApiDependencies, monthlyBills?: MonthlyBillsStore) {
   const app = express();
   app.use(express.json());
 
@@ -133,6 +135,30 @@ export function createApp(properties: PropertyStore, roofProfiles: RoofProfileSt
       if (error instanceof SolarEstimateError) { response.status(error.status).json({ error: error.message }); return; }
       throw error;
     }
+  });
+
+  app.get("/api/properties/:id/electricity-bills", async (request, response) => {
+    if (!monthlyBills) { response.status(503).json({ error: "Electricity bills are unavailable." }); return; }
+    const year = billYearSchema.safeParse(Number(request.query.year));
+    if (!year.success || typeof request.query.year !== "string" || !/^\d{4}$/u.test(request.query.year)) {
+      response.status(400).json({ error: "Choose a valid historical bill year." });
+      return;
+    }
+    const result = await monthlyBills.load(String(request.params.id), year.data);
+    if (!result.propertyExists) { response.status(404).json({ error: "Property not found." }); return; }
+    response.json(result.bills);
+  });
+
+  app.put("/api/properties/:id/electricity-bills", async (request, response) => {
+    if (!monthlyBills) { response.status(503).json({ error: "Electricity bills are unavailable." }); return; }
+    const parsed = monthlyBillsInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Enter twelve valid USD bill amounts for the selected year." });
+      return;
+    }
+    const result = await monthlyBills.save(String(request.params.id), parsed.data);
+    if (!result) { response.status(404).json({ error: "Property not found." }); return; }
+    response.json(result);
   });
 
   app.use((_request, response) => {

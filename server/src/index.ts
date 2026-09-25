@@ -6,13 +6,14 @@ import { createPrismaPropertyStore } from "./properties.js";
 import { createPrismaRoofProfileStore } from "./roofProfiles.js";
 import { createPrismaSolarSystemStore } from "./solarSystems.js";
 import { createPvWattsEstimator } from "./pvwatts.js";
+import { createPrismaMonthlyBillsStore } from "./monthlyBills.js";
 
 const config = loadConfig();
 const prisma = new PrismaClient();
 const app = createApp(createPrismaPropertyStore(prisma), createPrismaRoofProfileStore(prisma), {
   systems: createPrismaSolarSystemStore(prisma),
   estimate: createPvWattsEstimator(config.PVWATTS_API_KEY),
-});
+}, createPrismaMonthlyBillsStore(prisma));
 
 app.listen(config.PORT, () => {
   // Only static metadata is logged; connection strings and keys are never logged.

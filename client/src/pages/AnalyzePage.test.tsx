@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AnalyzePage } from "./AnalyzePage";
 import { geocodeStoredAddress } from "../geocode";
 import { estimateSolarProduction, loadRoofProfile, loadSolarSystem, lookupProperty, saveGeocodedProperty,
-  saveSolarSystem } from "../propertyApi";
+  saveSolarSystem, loadMonthlyBills } from "../propertyApi";
 import type { SunlightSettings } from "../sunlight";
 
 vi.mock("../geocode", () => ({ geocodeStoredAddress: vi.fn() }));
@@ -22,6 +22,8 @@ vi.mock("../propertyApi", () => ({
   loadSolarSystem: vi.fn(),
   saveSolarSystem: vi.fn(),
   estimateSolarProduction: vi.fn(),
+  loadMonthlyBills: vi.fn(),
+  saveMonthlyBills: vi.fn(),
 }));
 
 const property = {
@@ -49,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(loadRoofProfile).mockResolvedValue(null);
   vi.mocked(loadSolarSystem).mockResolvedValue(null);
+  vi.mocked(loadMonthlyBills).mockImplementation(async (_propertyId, year) => ({ year, monthlyAmounts: null }));
 });
 
 describe("Analyze property search", () => {

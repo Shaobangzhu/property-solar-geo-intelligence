@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { EnergyProductionPanel } from "../components/EnergyProductionPanel";
+import { HistoricalBillsPanel } from "../components/HistoricalBillsPanel";
 import { PropertyVisualization } from "../components/PropertyVisualization";
 import { RoofProfilePanel } from "../components/RoofProfilePanel";
 import { SolarSystemPanel } from "../components/SolarSystemPanel";
@@ -27,7 +28,6 @@ import type { RoofGeometry } from "../roofGeometry";
 import { createDefaultSunlightSettings } from "../sunlight";
 
 const plannedSections = [
-  "Electricity Bills",
   "Economics",
 ];
 
@@ -272,6 +272,7 @@ export function AnalyzePage() {
             systemReady={Boolean(currentSolar?.system)} loading={currentEstimate?.loading ?? false}
             error={currentEstimate?.error ?? ""} result={currentEstimate?.result ?? null}
             onEstimate={() => { void runEstimate(); }} />
+          <HistoricalBillsPanel key={`bills-${propertyId ?? "none"}`} propertyId={propertyId ?? null} />
           {plannedSections.map((section) => <section key={section} className="section-card"><h2>{section}</h2><p>Planned</p></section>)}
         </aside>
       </div>

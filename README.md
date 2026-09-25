@@ -34,7 +34,7 @@ docker compose logs postgres
 npm run prisma:migrate:deploy
 ```
 
-Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the Property, RoofProfile, and SolarSystemConfiguration migrations; do not create the tables manually.
+Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the Property, RoofProfile, SolarSystemConfiguration, and MonthlyElectricityBill migrations; do not create the tables manually.
 
 For normal development, run `docker compose up -d postgres` first, `npm --prefix server run dev` in one terminal, and `npm --prefix client run dev` in another. The database survives Express, Vite, and container restarts.
 
@@ -78,3 +78,7 @@ Visible shadows depend on 3D building context. Terrain and the saved 2D outline 
 In **Solar System**, select a generic 4 kW, 7 kW, or 10 kW preset, or enter a custom capacity up to 100 kW. Set system losses, module type, and fixed roof/open-rack mounting. `GET /api/properties/:id/solar-system` loads the current configuration, and `PUT` to the same path validates and saves it. Saving with a Roof Profile also requests an estimate; **Estimate production** runs it again later. Usable roof area is recorded as an assumption but does not automatically size the system.
 
 `POST /api/solar/estimate` accepts only a property ID. Express reads the saved property coordinates, Roof Profile tilt and azimuth, and Solar System settings, then calls the current [PVWatts V8 API](https://developer.nlr.gov/docs/solar/pvwatts/v8/) with monthly output. The normalized response contains January–December AC energy in kWh, annual AC energy in kWh, optional capacity factor and weather resource details, plus separate warnings. The PVWatts credential is used only by Express and is never sent to React or returned with the estimate. The manually entered `estimatedShadingFactor` and ArcGIS shadow visualization are not applied to PVWatts losses; enter any desired loss assumption explicitly in **System losses**. The result is a planning estimate, not a measured or guaranteed yield.
+
+In **Historical Electricity Bill & Solar Value**, choose a bill year and click **Enter Monthly Bills**. Enter January through December in USD; blank fields save as $0.00. Saving updates all twelve months in one database transaction. Reopen the modal or reload the property and year to edit existing values. The gray chart displays only saved historical bills, with a zero-height bar for a $0 month. It does not calculate solar value or utility-specific economics. `GET /api/properties/:id/electricity-bills?year=YYYY` loads a year, and `PUT /api/properties/:id/electricity-bills` saves `{ "year": YYYY, "monthlyAmounts": [12 numbers] }`.
+
+To run the optional local PostgreSQL integrity test after applying migrations, use `RUN_DB_TESTS=1 npm --prefix server run test -- monthlyBills.db.test.ts`. It creates and deletes a temporary property and checks monthly uniqueness and transaction rollback.
