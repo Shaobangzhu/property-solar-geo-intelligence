@@ -21,7 +21,7 @@ cp -n client/.env.example client/.env
 cp -n server/.env.example server/.env
 ```
 
-Set `PSGI_POSTGRES_USER` and `PSGI_POSTGRES_PASSWORD` in the repository-root `.env`. Use a credential dedicated to this project. Set `server/.env` `DATABASE_URL` with the same user and password, using `postgresql://<user>:<password>@127.0.0.1:5433/property_solar_geo_intelligence?schema=public`. Set `client/.env` `VITE_ARCGIS_API_KEY` to an ArcGIS API key with **stored geocoding**, basemap, and elevation privileges. `PVWATTS_API_KEY` is reserved for a later backend-only integration. All real `.env` files are ignored by Git.
+Set `PSGI_POSTGRES_USER` and `PSGI_POSTGRES_PASSWORD` in the repository-root `.env`. Use a credential dedicated to this project. Set `server/.env` `DATABASE_URL` with the same user and password, using `postgresql://<user>:<password>@127.0.0.1:5433/property_solar_geo_intelligence?schema=public`. Set `client/.env` `VITE_ARCGIS_API_KEY` to an ArcGIS API key with **stored geocoding**, basemap, and elevation privileges. Set `server/.env` `PVWATTS_API_KEY` for backend-only production estimates. A missing key leaves property and roof features available and returns a clear error when an estimate is requested. All real `.env` files are ignored by Git.
 
 ## Local Database
 
@@ -34,7 +34,7 @@ docker compose logs postgres
 npm run prisma:migrate:deploy
 ```
 
-Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the Property and RoofProfile migrations; do not create the tables manually.
+Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the Property, RoofProfile, and SolarSystemConfiguration migrations; do not create the tables manually.
 
 For normal development, run `docker compose up -d postgres` first, `npm --prefix server run dev` in one terminal, and `npm --prefix client run dev` in another. The database survives Express, Vite, and container restarts.
 
@@ -74,3 +74,7 @@ Optionally, choose the polygon tool in **Map** mode to draw one roof outline, th
 In **Sunlight & Shadow**, choose a date and local time, then set the property's UTC offset. The offset defaults to your device's current offset and should be adjusted for properties in other time zones or when daylight saving time applies. Switch to **3D** to see the simulated sun position. **Show shadows** enables direct shadows from available 3D objects. If a roof outline exists, it also adds a [ShadowCastAnalysis](https://developers.arcgis.com/javascript/latest/references/core/analysis/ShadowCastAnalysis/) overlay clipped to that outline for up to 30 minutes after the selected time. The overlay is an accumulated shadow visualization, separate from the scene's light at the selected instant. It is removed when shadows are turned off or the scene unmounts.
 
 Visible shadows depend on 3D building context. Terrain and the saved 2D outline do not provide a measured roof model or reliable shading loss. The Roof Profile's `estimatedShadingFactor` remains an explicit manual assumption and is not derived from this visualization or sent to PVWatts.
+
+In **Solar System**, select a generic 4 kW, 7 kW, or 10 kW preset, or enter a custom capacity up to 100 kW. Set system losses, module type, and fixed roof/open-rack mounting. `GET /api/properties/:id/solar-system` loads the current configuration, and `PUT` to the same path validates and saves it. Saving with a Roof Profile also requests an estimate; **Estimate production** runs it again later. Usable roof area is recorded as an assumption but does not automatically size the system.
+
+`POST /api/solar/estimate` accepts only a property ID. Express reads the saved property coordinates, Roof Profile tilt and azimuth, and Solar System settings, then calls the current [PVWatts V8 API](https://developer.nlr.gov/docs/solar/pvwatts/v8/) with monthly output. The normalized response contains January–December AC energy in kWh, annual AC energy in kWh, optional capacity factor and weather resource details, plus separate warnings. The PVWatts credential is used only by Express and is never sent to React or returned with the estimate. The manually entered `estimatedShadingFactor` and ArcGIS shadow visualization are not applied to PVWatts losses; enter any desired loss assumption explicitly in **System losses**. The result is a planning estimate, not a measured or guaranteed yield.

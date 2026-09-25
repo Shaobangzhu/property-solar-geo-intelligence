@@ -1,26 +1,32 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { EnergyProductionPanel } from "../components/EnergyProductionPanel";
 import { PropertyVisualization } from "../components/PropertyVisualization";
 import { RoofProfilePanel } from "../components/RoofProfilePanel";
+import { SolarSystemPanel } from "../components/SolarSystemPanel";
 import { SunlightShadowPanel } from "../components/SunlightShadowPanel";
 import { hasValidCoordinates } from "../components/propertyLocation";
 import { geocodeStoredAddress } from "../geocode";
 import {
   lookupProperty,
+  loadSolarSystem,
   loadRoofProfile,
+  estimateSolarProduction,
   saveGeocodedProperty,
   saveRoofProfile,
+  saveSolarSystem,
   updatePropertyDetails,
   type Property,
   type PropertyDetails,
   type RoofProfile,
   type RoofProfileInput,
+  type SolarEstimateResult,
+  type SolarSystem,
+  type SolarSystemInput,
 } from "../propertyApi";
 import type { RoofGeometry } from "../roofGeometry";
 import { createDefaultSunlightSettings } from "../sunlight";
 
 const plannedSections = [
-  "Solar System",
-  "Energy Production",
   "Electricity Bills",
   "Economics",
 ];
@@ -32,6 +38,9 @@ type RoofState = {
   loading: boolean;
   error: string;
 };
+
+type SolarState = { propertyId: string; system: SolarSystem | null; loading: boolean; error: string };
+type EstimateState = { propertyId: string; result: SolarEstimateResult | null; loading: boolean; error: string };
 
 function OptionalDetails({ property, onSaved }: { property: Property; onSaved: (property: Property) => void }) {
   const [propertyType, setPropertyType] = useState(property.propertyType ?? "");
@@ -86,10 +95,20 @@ export function AnalyzePage() {
   const [roofSketchError, setRoofSketchError] = useState("");
   const [sunlight, setSunlight] = useState(createDefaultSunlightSettings);
   const [sunlightError, setSunlightError] = useState("");
+  const [solarState, setSolarState] = useState<SolarState | null>(null);
+  const [solarRetry, setSolarRetry] = useState(0);
+  const [estimateState, setEstimateState] = useState<EstimateState | null>(null);
   const propertyId = property?.id;
+  const activePropertyId = useRef(propertyId);
+  const estimateGeneration = useRef(0);
+  activePropertyId.current = propertyId;
   const currentRoof = roofState?.propertyId === propertyId ? roofState : null;
+  const currentSolar = solarState?.propertyId === propertyId ? solarState : null;
+  const currentEstimate = estimateState?.propertyId === propertyId ? estimateState : null;
   const roofGeometry = currentRoof?.geometry ?? null;
   const roofLoading = Boolean(propertyId) && (!currentRoof || currentRoof.loading);
+  const solarLoading = Boolean(propertyId) && (!currentSolar || currentSolar.loading);
+  const roofReady = Boolean(currentRoof?.profile);
 
   useEffect(() => {
     if (!propertyId) return;
@@ -111,11 +130,61 @@ export function AnalyzePage() {
     return () => { active = false; };
   }, [propertyId, roofRetry]);
 
+  useEffect(() => {
+    if (!propertyId) return;
+    let active = true;
+    estimateGeneration.current += 1;
+    setSolarState({ propertyId, system: null, loading: true, error: "" });
+    setEstimateState({ propertyId, result: null, loading: false, error: "" });
+    void loadSolarSystem(propertyId).then((system) => {
+      if (active) setSolarState({ propertyId, system, loading: false, error: "" });
+    }).catch((cause: unknown) => {
+      if (active) setSolarState({ propertyId, system: null, loading: false,
+        error: cause instanceof Error ? cause.message : "Could not load the Solar System." });
+    });
+    return () => { active = false; };
+  }, [propertyId, solarRetry]);
+
   async function saveCurrentRoof(input: RoofProfileInput) {
     if (!propertyId) return;
+    estimateGeneration.current += 1;
+    setEstimateState((previous) => previous?.propertyId === propertyId
+      ? { ...previous, result: null, loading: false, error: "" } : previous);
     const profile = await saveRoofProfile(propertyId, input);
     setRoofState((previous) => previous && previous.propertyId === propertyId
       ? { ...previous, profile, geometry: profile.roofGeometryJson } : previous);
+    setEstimateState((previous) => previous && previous.propertyId === propertyId
+      ? { ...previous, result: null, error: "", loading: false } : previous);
+  }
+
+  async function runEstimate(forPropertyId = propertyId) {
+    if (!forPropertyId || activePropertyId.current !== forPropertyId) return;
+    const generation = ++estimateGeneration.current;
+    setEstimateState({ propertyId: forPropertyId, result: null, loading: true, error: "" });
+    try {
+      const result = await estimateSolarProduction(forPropertyId);
+      setEstimateState((previous) => previous?.propertyId === forPropertyId && activePropertyId.current === forPropertyId
+        && estimateGeneration.current === generation
+        ? { propertyId: forPropertyId, result, loading: false, error: "" } : previous);
+    } catch (cause) {
+      setEstimateState((previous) => previous?.propertyId === forPropertyId && activePropertyId.current === forPropertyId
+        && estimateGeneration.current === generation
+        ? { propertyId: forPropertyId, result: null, loading: false,
+          error: cause instanceof Error ? cause.message : "Could not estimate production." } : previous);
+    }
+  }
+
+  async function saveCurrentSolar(input: SolarSystemInput) {
+    if (!propertyId) return;
+    estimateGeneration.current += 1;
+    setEstimateState((previous) => previous?.propertyId === propertyId
+      ? { ...previous, result: null, loading: false, error: "" } : previous);
+    const system = await saveSolarSystem(propertyId, input);
+    if (activePropertyId.current !== propertyId) return;
+    setSolarState((previous) => previous?.propertyId === propertyId
+      ? { propertyId, system, loading: false, error: "" } : previous);
+    setEstimateState({ propertyId, result: null, loading: false, error: "" });
+    if (roofReady) await runEstimate(propertyId);
   }
 
   function updateRoofGeometry(geometry: RoofGeometry | null) {
@@ -190,12 +259,19 @@ export function AnalyzePage() {
               </div>
             ) : <p>No property loaded.</p>}
           </section>
-          <RoofProfilePanel key={propertyId ?? "none"} property={property} profile={currentRoof?.profile ?? null}
+          <RoofProfilePanel key={`roof-${propertyId ?? "none"}`} property={property} profile={currentRoof?.profile ?? null}
             geometry={roofGeometry} loading={roofLoading} error={currentRoof?.error ?? ""}
             onRetry={() => setRoofRetry((count) => count + 1)} onSave={saveCurrentRoof}
             onClearGeometry={() => updateRoofGeometry(null)} />
           <SunlightShadowPanel propertyLoaded={Boolean(property)} hasRoofOutline={Boolean(roofGeometry)}
             settings={sunlight} onChange={setSunlight} />
+          <SolarSystemPanel key={`solar-${propertyId ?? "none"}`} propertyLoaded={Boolean(property)}
+            system={currentSolar?.system ?? null} loading={solarLoading} error={currentSolar?.error ?? ""}
+            roofReady={roofReady} onRetry={() => setSolarRetry((count) => count + 1)} onSave={saveCurrentSolar} />
+          <EnergyProductionPanel propertyLoaded={Boolean(property)} roofReady={roofReady}
+            systemReady={Boolean(currentSolar?.system)} loading={currentEstimate?.loading ?? false}
+            error={currentEstimate?.error ?? ""} result={currentEstimate?.result ?? null}
+            onEstimate={() => { void runEstimate(); }} />
           {plannedSections.map((section) => <section key={section} className="section-card"><h2>{section}</h2><p>Planned</p></section>)}
         </aside>
       </div>

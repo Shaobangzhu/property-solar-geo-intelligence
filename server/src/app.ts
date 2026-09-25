@@ -3,6 +3,8 @@ import { z } from "zod";
 import { normalizeAddress } from "./address.js";
 import type { PropertyStore } from "./properties.js";
 import { roofProfileInputSchema, type RoofProfileStore } from "./roofProfiles.js";
+import { SolarEstimateError, solarEstimateInputsSchema, type SolarEstimateInputs, type SolarEstimateResult } from "./pvwatts.js";
+import { solarSystemInputSchema, type SolarSystemStore } from "./solarSystems.js";
 
 const addressSchema = z.string().trim().min(5).max(200);
 const lookupSchema = z.object({ address: addressSchema }).strict();
@@ -20,7 +22,12 @@ const detailsSchema = z.object({
   lotSizeSqFt: z.number().finite().positive().max(100_000_000).nullable(),
 }).strict();
 
-export function createApp(properties: PropertyStore, roofProfiles: RoofProfileStore) {
+export type SolarApiDependencies = {
+  systems: SolarSystemStore;
+  estimate: (inputs: SolarEstimateInputs) => Promise<SolarEstimateResult>;
+};
+
+export function createApp(properties: PropertyStore, roofProfiles: RoofProfileStore, solar?: SolarApiDependencies) {
   const app = express();
   app.use(express.json());
 
@@ -87,6 +94,45 @@ export function createApp(properties: PropertyStore, roofProfiles: RoofProfileSt
       return;
     }
     response.json({ roofProfile });
+  });
+
+  app.get("/api/properties/:id/solar-system", async (request, response) => {
+    if (!solar) { response.status(503).json({ error: "Solar estimation is unavailable." }); return; }
+    const result = await solar.systems.getForProperty(String(request.params.id));
+    if (!result.propertyExists) { response.status(404).json({ error: "Property not found." }); return; }
+    response.json({ solarSystem: result.solarSystem });
+  });
+
+  app.put("/api/properties/:id/solar-system", async (request, response) => {
+    if (!solar) { response.status(503).json({ error: "Solar estimation is unavailable." }); return; }
+    const parsed = solarSystemInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Check the solar system settings and try again." });
+      return;
+    }
+    const solarSystem = await solar.systems.saveForProperty(String(request.params.id), parsed.data);
+    if (!solarSystem) { response.status(404).json({ error: "Property not found." }); return; }
+    response.json({ solarSystem });
+  });
+
+  app.post("/api/solar/estimate", async (request, response) => {
+    if (!solar) { response.status(503).json({ error: "Solar estimation is unavailable." }); return; }
+    const parsed = z.object({ propertyId: z.string().min(1).max(100) }).strict().safeParse(request.body);
+    if (!parsed.success) { response.status(400).json({ error: "Select a valid property." }); return; }
+    const context = await solar.systems.getEstimateContext(parsed.data.propertyId);
+    if (context.status === "propertyMissing") { response.status(404).json({ error: "Property not found." }); return; }
+    if (context.status === "roofMissing") { response.status(409).json({ error: "Save a Roof Profile before estimating production." }); return; }
+    if (context.status === "systemMissing") { response.status(409).json({ error: "Save a Solar System before estimating production." }); return; }
+    if (context.status !== "ready") { response.status(422).json({ error: "Saved solar inputs are incomplete." }); return; }
+    const inputs = solarEstimateInputsSchema.safeParse(context.inputs);
+    if (!inputs.success) { response.status(422).json({ error: "Saved solar inputs are invalid. Check the property, roof, and system settings." }); return; }
+    try {
+      const result = await solar.estimate(inputs.data);
+      response.json(result);
+    } catch (error) {
+      if (error instanceof SolarEstimateError) { response.status(error.status).json({ error: error.message }); return; }
+      throw error;
+    }
   });
 
   app.use((_request, response) => {

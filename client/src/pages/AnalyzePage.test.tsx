@@ -2,7 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AnalyzePage } from "./AnalyzePage";
 import { geocodeStoredAddress } from "../geocode";
-import { loadRoofProfile, lookupProperty, saveGeocodedProperty } from "../propertyApi";
+import { estimateSolarProduction, loadRoofProfile, loadSolarSystem, lookupProperty, saveGeocodedProperty,
+  saveSolarSystem } from "../propertyApi";
 import type { SunlightSettings } from "../sunlight";
 
 vi.mock("../geocode", () => ({ geocodeStoredAddress: vi.fn() }));
@@ -18,6 +19,9 @@ vi.mock("../propertyApi", () => ({
   updatePropertyDetails: vi.fn(),
   loadRoofProfile: vi.fn(),
   saveRoofProfile: vi.fn(),
+  loadSolarSystem: vi.fn(),
+  saveSolarSystem: vi.fn(),
+  estimateSolarProduction: vi.fn(),
 }));
 
 const property = {
@@ -44,6 +48,7 @@ function submitAddress() {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(loadRoofProfile).mockResolvedValue(null);
+  vi.mocked(loadSolarSystem).mockResolvedValue(null);
 });
 
 describe("Analyze property search", () => {
@@ -115,5 +120,32 @@ describe("Analyze property search", () => {
     expect(await screen.findByText(second.displayAddress)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("visualization")).toHaveAttribute("data-time", "12:00"));
     expect(screen.getByTestId("visualization")).toHaveAttribute("data-shadows-enabled", "false");
+  });
+
+  it("saves a system and shows only backend PVWatts production", async () => {
+    vi.mocked(lookupProperty).mockResolvedValue(property);
+    vi.mocked(loadRoofProfile).mockResolvedValue({
+      id: "roof-1", propertyId: property.id, usableAreaSqFt: 620, tiltDegrees: 25,
+      azimuthDegrees: 180, estimatedShadingFactor: 0.2, roofGeometryJson: null,
+      createdAt: property.createdAt, updatedAt: property.updatedAt,
+    });
+    vi.mocked(saveSolarSystem).mockResolvedValue({
+      id: "solar-1", propertyId: property.id, preset: "medium", systemCapacityKw: 7,
+      systemLossPercent: 14, moduleType: 0, arrayType: 1,
+      createdAt: property.createdAt, updatedAt: property.updatedAt,
+    });
+    vi.mocked(estimateSolarProduction).mockResolvedValue({
+      estimate: { annualAcKwh: 8400, monthlyAcKwh: Array(12).fill(700) }, warnings: [],
+    });
+    render(<AnalyzePage />);
+    submitAddress();
+    expect(await screen.findByRole("button", { name: "Save & estimate" })).toBeInTheDocument();
+    expect(screen.queryByText("8,400 kWh")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save & estimate" }));
+    expect(await screen.findByText("8,400 kWh")).toBeInTheDocument();
+    expect(saveSolarSystem).toHaveBeenCalledWith(property.id, {
+      preset: "medium", systemCapacityKw: 7, systemLossPercent: 14, moduleType: 0, arrayType: 1,
+    });
+    expect(estimateSolarProduction).toHaveBeenCalledWith(property.id);
   });
 });

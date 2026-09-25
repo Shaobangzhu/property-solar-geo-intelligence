@@ -11,4 +11,10 @@ describe("loadConfig", () => {
   it("requires DATABASE_URL", () => {
     expect(() => loadConfig({})).toThrow();
   });
+
+  it("treats a blank PVWatts key as missing without stopping the API", () => {
+    const config = loadConfig({ DATABASE_URL: "postgresql://user:password@localhost:5432/solar",
+      PVWATTS_API_KEY: "" });
+    expect(config.PVWATTS_API_KEY).toBeUndefined();
+  });
 });

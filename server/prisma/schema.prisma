@@ -20,6 +20,7 @@ model Property {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   roofProfile      RoofProfile?
+  solarSystem      SolarSystemConfiguration?
 }
 
 model RoofProfile {
@@ -33,4 +34,17 @@ model RoofProfile {
   roofGeometryJson       Json?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
+}
+
+model SolarSystemConfiguration {
+  id                String   @id @default(cuid())
+  propertyId        String   @unique
+  property          Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  preset            String
+  systemCapacityKw  Decimal  @db.Decimal(10, 3)
+  systemLossPercent Decimal  @db.Decimal(5, 2)
+  moduleType        Int
+  arrayType         Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }

@@ -31,6 +31,30 @@ export type RoofProfile = RoofProfileInput & {
   updatedAt: string;
 };
 
+export type SolarSystemInput = {
+  preset: "small" | "medium" | "large" | "custom";
+  systemCapacityKw: number;
+  systemLossPercent: number;
+  moduleType: 0 | 1 | 2;
+  arrayType: 0 | 1;
+};
+
+export type SolarSystem = SolarSystemInput & {
+  id: string;
+  propertyId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SolarProductionEstimate = {
+  monthlyAcKwh: number[];
+  annualAcKwh: number;
+  capacityFactor?: number;
+  resource?: { latitude: number; longitude: number; distanceMeters?: number; source?: string };
+};
+
+export type SolarEstimateResult = { estimate: SolarProductionEstimate; warnings: string[] };
+
 async function sendJson<T>(path: string, body?: unknown, method = "POST"): Promise<T> {
   let response: Response;
   try {
@@ -85,4 +109,22 @@ export async function saveRoofProfile(propertyId: string, input: RoofProfileInpu
     `/api/properties/${encodeURIComponent(propertyId)}/roof-profile`, input, "PUT",
   );
   return result.roofProfile;
+}
+
+export async function loadSolarSystem(propertyId: string): Promise<SolarSystem | null> {
+  const result = await sendJson<{ solarSystem: SolarSystem | null }>(
+    `/api/properties/${encodeURIComponent(propertyId)}/solar-system`, undefined, "GET",
+  );
+  return result.solarSystem;
+}
+
+export async function saveSolarSystem(propertyId: string, input: SolarSystemInput): Promise<SolarSystem> {
+  const result = await sendJson<{ solarSystem: SolarSystem }>(
+    `/api/properties/${encodeURIComponent(propertyId)}/solar-system`, input, "PUT",
+  );
+  return result.solarSystem;
+}
+
+export async function estimateSolarProduction(propertyId: string): Promise<SolarEstimateResult> {
+  return sendJson<SolarEstimateResult>("/api/solar/estimate", { propertyId });
 }
