@@ -3,9 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AnalyzePage } from "./AnalyzePage";
 import { geocodeStoredAddress } from "../geocode";
 import { loadRoofProfile, lookupProperty, saveGeocodedProperty } from "../propertyApi";
+import type { SunlightSettings } from "../sunlight";
 
 vi.mock("../geocode", () => ({ geocodeStoredAddress: vi.fn() }));
-vi.mock("../components/PropertyVisualization", () => ({ PropertyVisualization: () => <div>Visualization</div> }));
+vi.mock("../components/PropertyVisualization", () => ({
+  PropertyVisualization: ({ sunlight }: { sunlight: SunlightSettings }) => (
+    <div data-testid="visualization" data-date={sunlight.date} data-time={sunlight.time}
+      data-shadows-enabled={sunlight.shadowsEnabled}>Visualization</div>
+  ),
+}));
 vi.mock("../propertyApi", () => ({
   lookupProperty: vi.fn(),
   saveGeocodedProperty: vi.fn(),
@@ -87,5 +93,27 @@ describe("Analyze property search", () => {
     submitAddress();
     expect(await screen.findByRole("alert")).toHaveTextContent("ArcGIS geocoding is unavailable.");
     await waitFor(() => expect(screen.getByRole("button", { name: "Load / Locate Property" })).toBeEnabled());
+  });
+
+  it("updates the scene settings and resets them for a different property", async () => {
+    const second = { ...property, id: "property-2", displayAddress: "100 Oak St, Redlands, CA" };
+    vi.mocked(lookupProperty).mockResolvedValueOnce(property).mockResolvedValueOnce(second);
+    render(<AnalyzePage />);
+    submitAddress();
+    expect(await screen.findByText(property.displayAddress)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-12-21" } });
+    fireEvent.change(screen.getByLabelText("Time"), { target: { value: "09:30" } });
+    fireEvent.click(screen.getByLabelText("Show shadows"));
+    expect(screen.getByTestId("visualization")).toHaveAttribute("data-date", "2026-12-21");
+    expect(screen.getByTestId("visualization")).toHaveAttribute("data-time", "09:30");
+    expect(screen.getByTestId("visualization")).toHaveAttribute("data-shadows-enabled", "true");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Property address" }), {
+      target: { value: second.displayAddress },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Load / Locate Property" }));
+    expect(await screen.findByText(second.displayAddress)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("visualization")).toHaveAttribute("data-time", "12:00"));
+    expect(screen.getByTestId("visualization")).toHaveAttribute("data-shadows-enabled", "false");
   });
 });

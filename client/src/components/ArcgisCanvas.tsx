@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import ShadowCastAnalysis from "@arcgis/core/analysis/ShadowCastAnalysis";
 import Graphic from "@arcgis/core/Graphic";
 import Point from "@arcgis/core/geometry/Point";
 import Polygon from "@arcgis/core/geometry/Polygon";
@@ -7,6 +8,7 @@ import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer";
 import SimpleFillSymbol from "@arcgis/core/symbols/SimpleFillSymbol";
 import SimpleMarkerSymbol from "@arcgis/core/symbols/SimpleMarkerSymbol";
 import PointSymbol3D from "@arcgis/core/symbols/PointSymbol3D";
+import SunLighting from "@arcgis/core/views/3d/environment/SunLighting";
 import "@arcgis/map-components/components/arcgis-map";
 import "@arcgis/map-components/components/arcgis-scene";
 import "@arcgis/map-components/components/arcgis-zoom";
@@ -18,6 +20,7 @@ import type { ArcgisScene } from "@arcgis/map-components/components/arcgis-scene
 import type { ArcgisSketch } from "@arcgis/map-components/components/arcgis-sketch";
 import type { Property } from "../propertyApi";
 import { serializeRoofRings, type RoofGeometry } from "../roofGeometry";
+import { parseSunlightSettings, type SunlightSettings } from "../sunlight";
 import { createPropertyNavigation } from "./propertyNavigation";
 
 type ViewElement = ArcgisMap | ArcgisScene;
@@ -70,19 +73,29 @@ function displayRoofGeometry(layer: GraphicsLayer, geometry: RoofGeometry | null
   }));
 }
 
+function removeShadowAnalysis(scene: ArcgisScene, analysis: ShadowCastAnalysis | null) {
+  if (!analysis) return;
+  scene.analyses.remove(analysis);
+  analysis.destroy();
+}
+
 export default function ArcgisCanvas({ mode, property, roofGeometry, canSketch,
-  onRoofGeometryChange, onRoofSketchError, onError }: {
+  sunlight, onRoofGeometryChange, onRoofSketchError, onSunlightError, onError }: {
   mode: Mode;
   property: Property;
   roofGeometry: RoofGeometry | null;
   canSketch: boolean;
+  sunlight: SunlightSettings;
   onRoofGeometryChange?: (geometry: RoofGeometry | null) => void;
   onRoofSketchError?: (message: string) => void;
+  onSunlightError?: (message: string) => void;
   onError: () => void;
 }) {
   const elementRef = useRef<ViewElement | null>(null);
   const sketchRef = useRef<ArcgisSketch | null>(null);
   const roofLayerRef = useRef<GraphicsLayer | null>(null);
+  const sunlightRef = useRef<SunLighting | null>(null);
+  const shadowAnalysisRef = useRef<ShadowCastAnalysis | null>(null);
   const markerRef = useRef<Graphic | null>(null);
   const [readyElement, setReadyElement] = useState<ViewElement | null>(null);
   const onErrorRef = useRef(onError);
@@ -91,6 +104,8 @@ export default function ArcgisCanvas({ mode, property, roofGeometry, canSketch,
   onRoofGeometryChangeRef.current = onRoofGeometryChange;
   const onRoofSketchErrorRef = useRef(onRoofSketchError);
   onRoofSketchErrorRef.current = onRoofSketchError;
+  const onSunlightErrorRef = useRef(onSunlightError);
+  onSunlightErrorRef.current = onSunlightError;
   const roofGeometryRef = useRef(roofGeometry);
   roofGeometryRef.current = roofGeometry;
   const { id, displayAddress, latitude, longitude } = property;
@@ -121,6 +136,11 @@ export default function ArcgisCanvas({ mode, property, roofGeometry, canSketch,
       active = false;
       if (markerRef.current) element.graphics.remove(markerRef.current);
       markerRef.current = null;
+      if (element.localName === "arcgis-scene") {
+        removeShadowAnalysis(element as ArcgisScene, shadowAnalysisRef.current);
+        shadowAnalysisRef.current = null;
+        sunlightRef.current = null;
+      }
       const layer = roofLayerRef.current;
       if (layer) {
         element.map?.remove(layer);
@@ -141,6 +161,69 @@ export default function ArcgisCanvas({ mode, property, roofGeometry, canSketch,
       sketchRef.current.layer = roofLayerRef.current;
     }
   }, [readyElement, canSketch]);
+
+  useEffect(() => {
+    if (!readyElement || mode !== "3d") return;
+    const scene = readyElement as ArcgisScene;
+    let time: ReturnType<typeof parseSunlightSettings>;
+    try {
+      time = parseSunlightSettings(sunlight);
+    } catch {
+      if (sunlightRef.current) sunlightRef.current.directShadowsEnabled = false;
+      removeShadowAnalysis(scene, shadowAnalysisRef.current);
+      shadowAnalysisRef.current = null;
+      onSunlightErrorRef.current?.("");
+      return;
+    }
+    try {
+      let lighting = sunlightRef.current;
+      if (!lighting) {
+        lighting = new SunLighting({
+          date: time.instant,
+          cameraTrackingEnabled: false,
+          directShadowsEnabled: sunlight.shadowsEnabled,
+        });
+        scene.environment.lighting = lighting;
+        sunlightRef.current = lighting;
+      } else {
+        lighting.date = time.instant;
+        lighting.directShadowsEnabled = sunlight.shadowsEnabled;
+      }
+
+      if (sunlight.shadowsEnabled && roofGeometry) {
+        const geometry = new Polygon({ rings: roofGeometry.coordinates, spatialReference: { wkid: 4326 } });
+        let analysis = shadowAnalysisRef.current;
+        if (!analysis) {
+          analysis = new ShadowCastAnalysis({
+            mode: "total-duration",
+            visualizeSunlight: false,
+            date: time.calendarDate,
+            startTimeOfDay: time.startTimeOfDay,
+            endTimeOfDay: time.endTimeOfDay,
+            utcOffset: time.utcOffsetHours,
+            geometry,
+            totalDurationOptions: { mode: "continuous", color: [77, 54, 158, 0.55] },
+          });
+          scene.analyses.add(analysis);
+          shadowAnalysisRef.current = analysis;
+        } else {
+          analysis.set({
+            date: time.calendarDate,
+            startTimeOfDay: time.startTimeOfDay,
+            endTimeOfDay: time.endTimeOfDay,
+            utcOffset: time.utcOffsetHours,
+            geometry,
+          });
+        }
+      } else {
+        removeShadowAnalysis(scene, shadowAnalysisRef.current);
+        shadowAnalysisRef.current = null;
+      }
+      onSunlightErrorRef.current?.("");
+    } catch (error) {
+      onSunlightErrorRef.current?.(error instanceof Error ? error.message : "Sunlight visualization is unavailable.");
+    }
+  }, [readyElement, mode, sunlight, roofGeometry]);
 
   function acceptSketchGraphic(graphic: Graphic | null | undefined) {
     try {

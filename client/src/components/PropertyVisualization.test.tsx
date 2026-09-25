@@ -3,18 +3,22 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Property } from "../propertyApi";
 import type { RoofGeometry } from "../roofGeometry";
+import type { SunlightSettings } from "../sunlight";
 import { PropertyVisualization } from "./PropertyVisualization";
 
 vi.mock("./ArcgisCanvas", () => ({
-  default: ({ mode, property, roofGeometry, canSketch, onError }: {
+  default: ({ mode, property, roofGeometry, canSketch, sunlight, onError }: {
     mode: "map" | "3d";
     property: Property;
     roofGeometry: RoofGeometry | null;
     canSketch: boolean;
+    sunlight: SunlightSettings;
     onError: () => void;
   }) => (
     <div data-testid="arcgis-canvas" data-mode={mode} data-property-id={property.id}
-      data-roof-outline={Boolean(roofGeometry)} data-sketch-enabled={canSketch}>
+      data-roof-outline={Boolean(roofGeometry)} data-sketch-enabled={canSketch}
+      data-sunlight-date={sunlight.date} data-sunlight-time={sunlight.time}
+      data-shadows-enabled={sunlight.shadowsEnabled}>
       <span>{property.displayAddress}</span>
       <button type="button" onClick={onError}>Simulate ArcGIS failure</button>
     </div>
@@ -74,6 +78,30 @@ describe("PropertyVisualization", () => {
     expect(await screen.findByTestId("arcgis-canvas")).toHaveAttribute("data-roof-outline", "true");
     fireEvent.click(screen.getByRole("button", { name: "Map" }));
     expect(await screen.findByTestId("arcgis-canvas")).toHaveAttribute("data-roof-outline", "true");
+  });
+
+  it("updates 3D sunlight settings without remounting the scene", async () => {
+    const first: SunlightSettings = {
+      date: "2026-09-24", time: "12:00", utcOffsetHours: -7, shadowsEnabled: false,
+    };
+    const { rerender } = render(<PropertyVisualization property={property} sunlight={first} />);
+    fireEvent.click(screen.getByRole("button", { name: "3D" }));
+    const canvas = await screen.findByTestId("arcgis-canvas");
+    expect(canvas).toHaveAttribute("data-shadows-enabled", "false");
+
+    rerender(<PropertyVisualization property={property} sunlight={{
+      ...first, date: "2026-12-21", time: "09:30", shadowsEnabled: true,
+    }} />);
+    expect(screen.getByTestId("arcgis-canvas")).toBe(canvas);
+    expect(canvas).toHaveAttribute("data-sunlight-date", "2026-12-21");
+    expect(canvas).toHaveAttribute("data-sunlight-time", "09:30");
+    expect(canvas).toHaveAttribute("data-shadows-enabled", "true");
+  });
+
+  it("shows a recoverable sunlight warning while keeping the scene available", async () => {
+    render(<PropertyVisualization property={property} sunlightError="Shadow visualization is unavailable." />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Shadow visualization is unavailable.");
+    expect(await screen.findByTestId("arcgis-canvas")).toBeInTheDocument();
   });
 
   it("uses fallback UI when the property has no valid coordinates", () => {

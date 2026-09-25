@@ -30,6 +30,13 @@ nav { display: flex; gap: 1rem; } nav a { color: #506058; text-decoration: none;
 .roof-form button:disabled { opacity: .6; }
 .roof-outline-status { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; justify-content: space-between; }
 .roof-outline-status button { background: #edf2ec; color: #244d2c; }
+.sunlight-shadow-panel .sunlight-controls { border-top: 1px solid #dbe4db; display: grid; gap: .7rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: .8rem; padding-top: .8rem; }
+.sunlight-controls label { display: grid; font-size: .85rem; gap: .25rem; }
+.sunlight-controls input:not([type="checkbox"]) { border: 1px solid #b8c7ba; border-radius: .35rem; font: inherit; padding: .45rem; width: 100%; }
+.sunlight-controls .sunlight-shadow-toggle { align-items: center; display: flex; gap: .45rem; }
+.sunlight-shadow-toggle input { accent-color: #3b6d41; height: 1rem; width: 1rem; }
+.sunlight-controls :disabled { opacity: .65; }
 .geo-fallback { align-items: center; background: linear-gradient(135deg, #d9ead1, #eaf2e7); color: #355d3d; display: flex; flex-direction: column; justify-content: center; min-height: 510px; padding: 1.5rem; text-align: center; }
 .geo-fallback button { background: #3b6d41; border: 0; border-radius: .35rem; color: #fff; cursor: pointer; padding: .6rem .8rem; }
 @media (max-width: 760px) { .site-header { padding: 1rem; }.page { padding: 1rem; }.analysis-layout { grid-template-columns: 1fr; }.geo-canvas { height: 320px; }.geo-fallback { min-height: 320px; }.search-row { flex-direction: column; } }
+@media (max-width: 420px) { .sunlight-shadow-panel .sunlight-controls { grid-template-columns: 1fr; } }

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { PropertyVisualization } from "../components/PropertyVisualization";
 import { RoofProfilePanel } from "../components/RoofProfilePanel";
+import { SunlightShadowPanel } from "../components/SunlightShadowPanel";
 import { hasValidCoordinates } from "../components/propertyLocation";
 import { geocodeStoredAddress } from "../geocode";
 import {
@@ -15,10 +16,10 @@ import {
   type RoofProfileInput,
 } from "../propertyApi";
 import type { RoofGeometry } from "../roofGeometry";
+import { createDefaultSunlightSettings } from "../sunlight";
 
 const plannedSections = [
   "Solar System",
-  "Sunlight & Shadow",
   "Energy Production",
   "Electricity Bills",
   "Economics",
@@ -83,6 +84,8 @@ export function AnalyzePage() {
   const [roofState, setRoofState] = useState<RoofState | null>(null);
   const [roofRetry, setRoofRetry] = useState(0);
   const [roofSketchError, setRoofSketchError] = useState("");
+  const [sunlight, setSunlight] = useState(createDefaultSunlightSettings);
+  const [sunlightError, setSunlightError] = useState("");
   const propertyId = property?.id;
   const currentRoof = roofState?.propertyId === propertyId ? roofState : null;
   const roofGeometry = currentRoof?.geometry ?? null;
@@ -92,6 +95,8 @@ export function AnalyzePage() {
     if (!propertyId) return;
     let active = true;
     setRoofSketchError("");
+    setSunlight(createDefaultSunlightSettings());
+    setSunlightError("");
     setRoofState({ propertyId, profile: null, geometry: null, loading: true, error: "" });
     void loadRoofProfile(propertyId).then((profile) => {
       if (active) setRoofState({
@@ -169,6 +174,7 @@ export function AnalyzePage() {
       <div className="analysis-layout">
         <PropertyVisualization property={property} roofGeometry={roofGeometry}
           canSketch={Boolean(currentRoof && !currentRoof.loading && !currentRoof.error)}
+          sunlight={sunlight} sunlightError={sunlightError} onSunlightError={setSunlightError}
           onRoofGeometryChange={updateRoofGeometry} onRoofSketchError={setRoofSketchError}
           roofSketchError={roofSketchError} />
         <aside className="analysis-sections" aria-label="Analysis sections">
@@ -188,6 +194,8 @@ export function AnalyzePage() {
             geometry={roofGeometry} loading={roofLoading} error={currentRoof?.error ?? ""}
             onRetry={() => setRoofRetry((count) => count + 1)} onSave={saveCurrentRoof}
             onClearGeometry={() => updateRoofGeometry(null)} />
+          <SunlightShadowPanel propertyLoaded={Boolean(property)} hasRoofOutline={Boolean(roofGeometry)}
+            settings={sunlight} onChange={setSunlight} />
           {plannedSections.map((section) => <section key={section} className="section-card"><h2>{section}</h2><p>Planned</p></section>)}
         </aside>
       </div>

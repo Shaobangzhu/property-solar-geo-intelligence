@@ -2,9 +2,9 @@
 
 Local-first Web GIS Proof of Concept for evaluating rooftop solar potential for one residential property at a time.
 
-## Current scope: M3 Simplified Roof Profile
+## Current scope: M4 Sunlight & Shadow Experience
 
-The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. A Roof Profile stores user-adjustable planning assumptions and an optional visual roof outline. Sunlight analysis and PVWatts modeling are planned for later milestones.
+The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. A Roof Profile stores user-adjustable planning assumptions and an optional visual roof outline. The Sunlight & Shadow panel lets you visually explore the 3D scene at different dates and times. Solar production and PVWatts modeling are planned for later milestones.
 
 ### Prerequisites
 
@@ -70,3 +70,7 @@ The visualization offers exactly two modes: **Map** and **3D**. The 3D scene use
 The **Roof Profile** panel loads the current profile for each property and lets you enter usable roof area, tilt, azimuth, and an optional shading factor. Azimuth is clockwise from north; shading is a 0–1 fraction of estimated sunlight loss. Tilt must be 0–90 degrees, and azimuth must be at least 0 and less than 360 degrees. Use **Save Roof Profile** to create or update it. `GET /api/properties/:id/roof-profile` loads the profile; `PUT /api/properties/:id/roof-profile` validates and saves it. Each property has at most one current profile.
 
 Optionally, choose the polygon tool in **Map** mode to draw one roof outline, then save the Roof Profile. The outline is stored as WGS84 GeoJSON and appears in Map and 3D. The 3D overlay follows visible scene surfaces for legibility. It is a planning visualization only: neither its area nor its vertical placement is an engineering measurement. Enter usable area separately based on your own assumption. **Remove outline** clears the draft; save again to persist the removal.
+
+In **Sunlight & Shadow**, choose a date and local time, then set the property's UTC offset. The offset defaults to your device's current offset and should be adjusted for properties in other time zones or when daylight saving time applies. Switch to **3D** to see the simulated sun position. **Show shadows** enables direct shadows from available 3D objects. If a roof outline exists, it also adds a [ShadowCastAnalysis](https://developers.arcgis.com/javascript/latest/references/core/analysis/ShadowCastAnalysis/) overlay clipped to that outline for up to 30 minutes after the selected time. The overlay is an accumulated shadow visualization, separate from the scene's light at the selected instant. It is removed when shadows are turned off or the scene unmounts.
+
+Visible shadows depend on 3D building context. Terrain and the saved 2D outline do not provide a measured roof model or reliable shading loss. The Roof Profile's `estimatedShadingFactor` remains an explicit manual assumption and is not derived from this visualization or sent to PVWatts.
