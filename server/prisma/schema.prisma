@@ -23,6 +23,7 @@ model Property {
   solarSystem      SolarSystemConfiguration?
   monthlyBills     MonthlyElectricityBill[]
   consumption      HouseholdConsumption?
+  analysisRuns      AnalysisRun[]
 }
 
 model RoofProfile {
@@ -71,4 +72,19 @@ model HouseholdConsumption {
   annualConsumptionKwh Decimal  @db.Decimal(12, 2)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+}
+
+model AnalysisRun {
+  id                        String   @id @default(cuid())
+  propertyId                String
+  property                  Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  snapshot                  Json     @db.JsonB
+  systemCapacityKw          Decimal  @db.Decimal(10, 3)
+  annualAcKwh               Decimal  @db.Decimal(14, 3)
+  estimatedAnnualSavingsUsd Decimal? @db.Decimal(14, 2)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([propertyId, createdAt])
+  @@index([createdAt])
 }

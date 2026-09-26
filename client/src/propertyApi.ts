@@ -139,6 +139,13 @@ export async function estimateSolarProduction(propertyId: string): Promise<Solar
   return sendJson<SolarEstimateResult>("/api/solar/estimate", { propertyId });
 }
 
+export async function estimateSolarPreview(propertyId: string, roofProfile: RoofProfileInput,
+  solarSystem: SolarSystemInput, runId?: string): Promise<SolarEstimateResult> {
+  return sendJson<SolarEstimateResult>("/api/solar/estimate-preview", {
+    propertyId, roofProfile, solarSystem, ...(runId ? { runId } : {}),
+  });
+}
+
 export async function loadMonthlyBills(propertyId: string, year: number): Promise<MonthlyBillYear> {
   return sendJson<MonthlyBillYear>(
     `/api/properties/${encodeURIComponent(propertyId)}/electricity-bills?year=${year}`, undefined, "GET",
@@ -188,4 +195,78 @@ export type TariffStatus = {
 
 export async function loadTariffStatus(): Promise<TariffStatus> {
   return sendJson<TariffStatus>("/api/economics/tariff-status", undefined, "GET");
+}
+
+export type AnalysisBills = { year: number; monthlyAmounts: number[] | null };
+
+export type AnalysisTariffReference = {
+  utility: string;
+  planId: string;
+  version: string;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+};
+
+export type AnalysisEconomics = {
+  estimatedAnnualElectricityCostUsd: number | null;
+  estimatedAnnualSolarValueUsd: number | null;
+  estimatedAnnualGridImportKwh: number | null;
+  estimatedAnnualGridExportKwh: number | null;
+  estimatedAnnualExportCreditUsd: number | null;
+  estimatedAnnualSavingsUsd: number | null;
+};
+
+export type AnalysisRunInput = {
+  propertyId: string;
+  roofProfile: RoofProfileInput;
+  solarSystem: SolarSystemInput;
+  production: SolarEstimateResult;
+  bills: AnalysisBills;
+  annualConsumptionKwh: number | null;
+  tariffReference: AnalysisTariffReference | null;
+  economics: AnalysisEconomics | null;
+};
+
+export type AnalysisRun = AnalysisRunInput & {
+  id: string;
+  property: Property; // Frozen property snapshot, separate from its live relation.
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AnalysisRunSummary = {
+  id: string;
+  property: Pick<Property, "id" | "displayAddress">;
+  systemCapacityKw: number;
+  annualAcKwh: number;
+  estimatedAnnualSavingsUsd: number | null;
+  createdAt: string;
+};
+
+export async function listAnalysisRuns(): Promise<AnalysisRunSummary[]> {
+  const result = await sendJson<{ runs: AnalysisRunSummary[] }>("/api/analysis-runs", undefined, "GET");
+  return result.runs;
+}
+
+export async function getAnalysisRun(id: string): Promise<AnalysisRun> {
+  const result = await sendJson<{ run: AnalysisRun }>(
+    `/api/analysis-runs/${encodeURIComponent(id)}`, undefined, "GET",
+  );
+  return result.run;
+}
+
+export async function createAnalysisRun(input: AnalysisRunInput): Promise<AnalysisRun> {
+  const result = await sendJson<{ run: AnalysisRun }>("/api/analysis-runs", input);
+  return result.run;
+}
+
+export async function updateAnalysisRun(id: string, input: AnalysisRunInput): Promise<AnalysisRun> {
+  const result = await sendJson<{ run: AnalysisRun }>(
+    `/api/analysis-runs/${encodeURIComponent(id)}`, input, "PUT",
+  );
+  return result.run;
+}
+
+export async function deleteAnalysisRun(id: string): Promise<void> {
+  await sendJson<void>(`/api/analysis-runs/${encodeURIComponent(id)}`, undefined, "DELETE");
 }

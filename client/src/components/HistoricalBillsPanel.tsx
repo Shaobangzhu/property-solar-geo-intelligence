@@ -69,39 +69,69 @@ function BillsModal({ year, savedAmounts, onCancel, onSave }: {
   </div>;
 }
 
-export function HistoricalBillsPanel({ propertyId }: { propertyId: string | null }) {
-  const [yearText, setYearText] = useState(String(new Date().getFullYear() - 1));
-  const [billsState, setBillsState] = useState<{ year: number; amounts: number[] | null } | null>(null);
-  const [loading, setLoading] = useState(Boolean(propertyId));
+export function HistoricalBillsPanel({ propertyId, snapshot, onChange, onReadyChange, readOnly = false }: {
+  propertyId: string | null;
+  snapshot?: { year: number; monthlyAmounts: number[] | null };
+  onChange?: (year: number, monthlyAmounts: number[] | null) => void;
+  onReadyChange?: (ready: boolean) => void;
+  readOnly?: boolean;
+}) {
+  const snapshotMode = snapshot !== undefined;
+  const [yearText, setYearText] = useState(String(snapshot?.year ?? new Date().getFullYear() - 1));
+  const [billsState, setBillsState] = useState<{ year: number; amounts: number[] | null } | null>(
+    snapshot ? { year: snapshot.year, amounts: snapshot.monthlyAmounts } : null);
+  const [loading, setLoading] = useState(Boolean(propertyId) && !snapshotMode);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const onReadyChangeRef = useRef(onReadyChange);
+  onReadyChangeRef.current = onReadyChange;
   const year = /^\d{4}$/u.test(yearText) && Number(yearText) >= 1900
     && Number(yearText) <= new Date().getFullYear() ? Number(yearText) : null;
   const hasLoaded = year !== null && billsState?.year === year;
   const bills = hasLoaded ? billsState?.amounts ?? null : null;
+  const ready = Boolean(propertyId && hasLoaded && !loading && !error && !modalOpen);
+
+  useEffect(() => { onReadyChangeRef.current?.(ready); }, [ready]);
+
+  const snapshotYear = snapshot?.year;
+  const snapshotAmountsJson = JSON.stringify(snapshot?.monthlyAmounts ?? null);
+  useEffect(() => {
+    if (snapshotYear === undefined) return;
+    const amounts = JSON.parse(snapshotAmountsJson) as number[] | null;
+    setYearText(String(snapshotYear));
+    setBillsState({ year: snapshotYear, amounts });
+    setLoading(false);
+    setError("");
+  }, [snapshotYear, snapshotAmountsJson]);
 
   useEffect(() => {
-    if (!propertyId || year === null) return;
+    if (!propertyId || year === null || snapshotMode) return;
     let active = true;
     setLoading(true);
     setError("");
     setBillsState(null);
     void loadMonthlyBills(propertyId, year).then((result) => {
-      if (active) { setBillsState({ year, amounts: result.monthlyAmounts }); setLoading(false); }
+      if (active) {
+        setBillsState({ year, amounts: result.monthlyAmounts }); setLoading(false);
+        onChangeRef.current?.(year, result.monthlyAmounts);
+      }
     }).catch((cause: unknown) => {
       if (active) { setError(cause instanceof Error ? cause.message : "Could not load monthly bills."); setLoading(false); }
     });
     return () => { active = false; };
-  }, [propertyId, year, retry]);
+  }, [propertyId, year, retry, snapshotMode]);
 
   function closeModal() { setModalOpen(false); trigger.current?.focus(); }
 
   async function save(amounts: number[]) {
     if (!propertyId || year === null) return;
-    const result = await saveMonthlyBills(propertyId, year, amounts);
-    setBillsState({ year, amounts: result.monthlyAmounts });
+    const savedAmounts = snapshotMode ? amounts : (await saveMonthlyBills(propertyId, year, amounts)).monthlyAmounts;
+    setBillsState({ year, amounts: savedAmounts });
+    onChangeRef.current?.(year, savedAmounts);
     closeModal();
   }
 
@@ -112,9 +142,19 @@ export function HistoricalBillsPanel({ propertyId }: { propertyId: string | null
     {!propertyId ? <p>Load a property to enter historical bills.</p> : <>
       <div className="bill-toolbar">
         <label>Bill year<input type="number" min="1900" max={new Date().getFullYear()} step="1"
-          value={yearText} onChange={(event) => { setYearText(event.target.value); setModalOpen(false); }} /></label>
-        <button ref={trigger} type="button" disabled={year === null || !hasLoaded || loading || Boolean(error)}
-          onClick={() => setModalOpen(true)}>Enter Monthly Bills</button>
+          value={yearText} disabled={readOnly}
+          onChange={(event) => {
+            const next = event.target.value;
+            setYearText(next);
+            setModalOpen(false);
+            if (snapshotMode && /^\d{4}$/u.test(next) && Number(next) >= 1900
+              && Number(next) <= new Date().getFullYear() && Number(next) !== year) {
+              setBillsState({ year: Number(next), amounts: null });
+              onChangeRef.current?.(Number(next), null);
+            }
+          }} /></label>
+        {!readOnly && <button ref={trigger} type="button" disabled={year === null || !hasLoaded || loading || Boolean(error)}
+          onClick={() => setModalOpen(true)}>Enter Monthly Bills</button>}
       </div>
       {year === null && <p role="alert" className="error-message">Choose a valid historical bill year.</p>}
       {loading && <p role="status">Loading historical bills…</p>}

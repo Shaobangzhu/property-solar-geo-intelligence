@@ -26,6 +26,7 @@ const property: PropertyRecord = {
 function mockStore(): PropertyStore {
   const records = new Map<string, PropertyRecord>();
   return {
+    findById: vi.fn(async (id) => [...records.values()].find((record) => record.id === id) ?? null),
     findByAddress: vi.fn(async (address) => records.get(address) ?? null),
     createIfAbsent: vi.fn(async (input) => {
       const existing = records.get(input.normalizedAddress);

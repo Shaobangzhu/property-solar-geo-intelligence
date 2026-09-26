@@ -25,12 +25,13 @@ export type NewProperty = {
 };
 
 export interface PropertyStore {
+  findById(id: string): Promise<PropertyRecord | null>;
   findByAddress(normalizedAddress: string): Promise<PropertyRecord | null>;
   createIfAbsent(input: NewProperty): Promise<{ property: PropertyRecord; created: boolean }>;
   updateDetails(id: string, details: PropertyDetails): Promise<PropertyRecord | null>;
 }
 
-function toRecord(property: Property): PropertyRecord {
+export function toPropertyRecord(property: Property): PropertyRecord {
   return {
     id: property.id,
     normalizedAddress: property.normalizedAddress,
@@ -48,26 +49,30 @@ function toRecord(property: Property): PropertyRecord {
 
 export function createPrismaPropertyStore(prisma: PrismaClient): PropertyStore {
   return {
+    async findById(id) {
+      const property = await prisma.property.findUnique({ where: { id } });
+      return property ? toPropertyRecord(property) : null;
+    },
     async findByAddress(normalizedAddress) {
       const property = await prisma.property.findUnique({ where: { normalizedAddress } });
-      return property ? toRecord(property) : null;
+      return property ? toPropertyRecord(property) : null;
     },
     async createIfAbsent(input) {
       const existing = await prisma.property.findUnique({
         where: { normalizedAddress: input.normalizedAddress },
       });
-      if (existing) return { property: toRecord(existing), created: false };
+      if (existing) return { property: toPropertyRecord(existing), created: false };
 
       try {
         const property = await prisma.property.create({ data: input });
-        return { property: toRecord(property), created: true };
+        return { property: toPropertyRecord(property), created: true };
       } catch (error) {
         // Another request may have inserted the same normalized address meanwhile.
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
           const property = await prisma.property.findUnique({
             where: { normalizedAddress: input.normalizedAddress },
           });
-          if (property) return { property: toRecord(property), created: false };
+          if (property) return { property: toPropertyRecord(property), created: false };
         }
         throw error;
       }
@@ -75,7 +80,7 @@ export function createPrismaPropertyStore(prisma: PrismaClient): PropertyStore {
     async updateDetails(id, details) {
       try {
         const property = await prisma.property.update({ where: { id }, data: details });
-        return toRecord(property);
+        return toPropertyRecord(property);
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
           return null;

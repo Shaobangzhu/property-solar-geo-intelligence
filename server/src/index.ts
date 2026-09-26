@@ -9,6 +9,7 @@ import { createPvWattsEstimator } from "./pvwatts.js";
 import { createPrismaMonthlyBillsStore } from "./monthlyBills.js";
 import { createPrismaConsumptionStore } from "./consumption.js";
 import { loadTariffCatalog, type TariffVersion } from "./economics.js";
+import { createPrismaAnalysisRunStore } from "./analysisRuns.js";
 
 const config = loadConfig();
 const prisma = new PrismaClient();
@@ -24,7 +25,7 @@ const app = createApp(createPrismaPropertyStore(prisma), createPrismaRoofProfile
   estimate: createPvWattsEstimator(config.PVWATTS_API_KEY),
 }, createPrismaMonthlyBillsStore(prisma), {
   consumption: createPrismaConsumptionStore(prisma), tariffCatalog,
-});
+}, createPrismaAnalysisRunStore(prisma));
 
 app.listen(config.PORT, () => {
   // Only static metadata is logged; connection strings and keys are never logged.

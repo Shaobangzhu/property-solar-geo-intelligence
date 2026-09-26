@@ -9,6 +9,7 @@ import { billYearSchema, monthlyBillsInputSchema, type MonthlyBillsStore } from 
 import { consumptionInputSchema, type ConsumptionStore } from "./consumption.js";
 import type { TariffVersion } from "./economics.js";
 import { getSceTariffStatus } from "./sceTariff.js";
+import { analysisRunInputSchema, type AnalysisRunStore } from "./analysisRuns.js";
 
 const addressSchema = z.string().trim().min(5).max(200);
 const lookupSchema = z.object({ address: addressSchema }).strict();
@@ -37,7 +38,8 @@ export type EconomicsApiDependencies = {
 };
 
 export function createApp(properties: PropertyStore, roofProfiles: RoofProfileStore,
-  solar?: SolarApiDependencies, monthlyBills?: MonthlyBillsStore, economics?: EconomicsApiDependencies) {
+  solar?: SolarApiDependencies, monthlyBills?: MonthlyBillsStore, economics?: EconomicsApiDependencies,
+  analysisRuns?: AnalysisRunStore) {
   const app = express();
   app.use(express.json());
 
@@ -145,6 +147,51 @@ export function createApp(properties: PropertyStore, roofProfiles: RoofProfileSt
     }
   });
 
+  app.post("/api/solar/estimate-preview", async (request, response) => {
+    if (!solar) { response.status(503).json({ error: "Solar estimation is unavailable." }); return; }
+    const parsed = z.object({
+      propertyId: z.string().min(1).max(100),
+      runId: z.string().min(1).max(100).optional(),
+      roofProfile: roofProfileInputSchema,
+      solarSystem: solarSystemInputSchema,
+    }).strict().safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Check the roof and solar assumptions and try again." });
+      return;
+    }
+    let coordinates: { latitude: number; longitude: number };
+    if (parsed.data.runId) {
+      if (!analysisRuns) { response.status(503).json({ error: "Analysis history is unavailable." }); return; }
+      const run = await analysisRuns.get(parsed.data.runId);
+      if (!run) { response.status(404).json({ error: "Analysis not found." }); return; }
+      if (run.propertyId !== parsed.data.propertyId) {
+        response.status(409).json({ error: "The analysis belongs to a different property." });
+        return;
+      }
+      coordinates = { latitude: run.property.latitude, longitude: run.property.longitude };
+    } else {
+      const property = await properties.findById(parsed.data.propertyId);
+      if (!property) { response.status(404).json({ error: "Property not found." }); return; }
+      coordinates = { latitude: property.latitude, longitude: property.longitude };
+    }
+    const inputs = solarEstimateInputsSchema.safeParse({
+      ...parsed.data.solarSystem,
+      ...coordinates,
+      tiltDegrees: parsed.data.roofProfile.tiltDegrees,
+      azimuthDegrees: parsed.data.roofProfile.azimuthDegrees,
+    });
+    if (!inputs.success) {
+      response.status(422).json({ error: "The property coordinates or solar assumptions are invalid." });
+      return;
+    }
+    try {
+      response.json(await solar.estimate(inputs.data));
+    } catch (error) {
+      if (error instanceof SolarEstimateError) { response.status(error.status).json({ error: error.message }); return; }
+      throw error;
+    }
+  });
+
   app.get("/api/properties/:id/electricity-bills", async (request, response) => {
     if (!monthlyBills) { response.status(503).json({ error: "Electricity bills are unavailable." }); return; }
     const year = billYearSchema.safeParse(Number(request.query.year));
@@ -190,6 +237,55 @@ export function createApp(properties: PropertyStore, roofProfiles: RoofProfileSt
 
   app.get("/api/economics/tariff-status", (_request, response) => {
     response.json(getSceTariffStatus(economics?.tariffCatalog ?? [], new Date().toISOString().slice(0, 10)));
+  });
+
+  app.get("/api/analysis-runs", async (_request, response) => {
+    if (!analysisRuns) { response.status(503).json({ error: "Analysis history is unavailable." }); return; }
+    response.json({ runs: await analysisRuns.list() });
+  });
+
+  app.get("/api/analysis-runs/:id", async (request, response) => {
+    if (!analysisRuns) { response.status(503).json({ error: "Analysis history is unavailable." }); return; }
+    const run = await analysisRuns.get(String(request.params.id));
+    if (!run) { response.status(404).json({ error: "Analysis not found." }); return; }
+    response.json({ run });
+  });
+
+  app.post("/api/analysis-runs", async (request, response) => {
+    if (!analysisRuns) { response.status(503).json({ error: "Analysis history is unavailable." }); return; }
+    const parsed = analysisRunInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "The analysis snapshot is incomplete or invalid. Check the property, roof, system, and production results." });
+      return;
+    }
+    const run = await analysisRuns.create(parsed.data);
+    if (!run) { response.status(404).json({ error: "Property not found." }); return; }
+    response.status(201).json({ run });
+  });
+
+  app.put("/api/analysis-runs/:id", async (request, response) => {
+    if (!analysisRuns) { response.status(503).json({ error: "Analysis history is unavailable." }); return; }
+    const parsed = analysisRunInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "The analysis snapshot is incomplete or invalid. Check the property, roof, system, and production results." });
+      return;
+    }
+    const result = await analysisRuns.update(String(request.params.id), parsed.data);
+    if (result.status === "notFound") { response.status(404).json({ error: "Analysis not found." }); return; }
+    if (result.status === "propertyMismatch") {
+      response.status(409).json({ error: "An analysis cannot be moved to another property." });
+      return;
+    }
+    response.json({ run: result.run });
+  });
+
+  app.delete("/api/analysis-runs/:id", async (request, response) => {
+    if (!analysisRuns) { response.status(503).json({ error: "Analysis history is unavailable." }); return; }
+    if (!await analysisRuns.delete(String(request.params.id))) {
+      response.status(404).json({ error: "Analysis not found." });
+      return;
+    }
+    response.status(204).send();
   });
 
   app.use((_request, response) => {

@@ -1,26 +1,41 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { loadHouseholdConsumption, loadTariffStatus, saveHouseholdConsumption,
-  type TariffStatus } from "../propertyApi";
+  type AnalysisEconomics, type AnalysisTariffReference, type TariffStatus } from "../propertyApi";
 
 const unavailableMetrics = [
-  ["Estimated Annual Electricity Cost", "USD"],
-  ["Estimated Solar Value", "USD"],
-  ["Estimated Grid Import", "kWh"],
-  ["Estimated Grid Export", "kWh"],
-  ["Estimated Export Credit", "USD"],
+  ["Estimated Annual Electricity Cost", "USD", "estimatedAnnualElectricityCostUsd"],
+  ["Estimated Solar Value", "USD", "estimatedAnnualSolarValueUsd"],
+  ["Estimated Grid Import", "kWh", "estimatedAnnualGridImportKwh"],
+  ["Estimated Grid Export", "kWh", "estimatedAnnualGridExportKwh"],
+  ["Estimated Export Credit", "USD", "estimatedAnnualExportCreditUsd"],
 ] as const;
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+const kwh = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
-export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
-  const [annualText, setAnnualText] = useState("");
-  const [consumptionLoading, setConsumptionLoading] = useState(Boolean(propertyId));
+export function EconomicsPanel({ propertyId, snapshot, onChange, readOnly = false,
+  tariffSnapshot = null, economicsSnapshot = null }: {
+  propertyId: string | null;
+  snapshot?: { annualConsumptionKwh: number | null };
+  onChange?: (annualConsumptionKwh: number | null) => void;
+  readOnly?: boolean;
+  tariffSnapshot?: AnalysisTariffReference | null;
+  economicsSnapshot?: AnalysisEconomics | null;
+}) {
+  const snapshotMode = snapshot !== undefined;
+  const snapshotAnnualConsumptionKwh = snapshot?.annualConsumptionKwh;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const [annualText, setAnnualText] = useState(snapshot?.annualConsumptionKwh?.toString() ?? "");
+  const [consumptionLoading, setConsumptionLoading] = useState(Boolean(propertyId) && !snapshotMode);
   const [consumptionError, setConsumptionError] = useState("");
   const [retry, setRetry] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [tariffStatus, setTariffStatus] = useState<TariffStatus | null>(null);
-  const [tariffLoading, setTariffLoading] = useState(true);
+  const [tariffLoading, setTariffLoading] = useState(!snapshotMode);
 
   useEffect(() => {
+    if (snapshotMode) { setTariffLoading(false); return; }
     let active = true;
     void loadTariffStatus().then((status) => {
       if (active) setTariffStatus(status);
@@ -30,10 +45,17 @@ export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
       if (active) setTariffLoading(false);
     });
     return () => { active = false; };
-  }, []);
+  }, [snapshotMode]);
 
   useEffect(() => {
-    if (!propertyId) return;
+    if (!snapshotMode) return;
+    setAnnualText(snapshotAnnualConsumptionKwh?.toString() ?? "");
+    setConsumptionLoading(false);
+    setConsumptionError("");
+  }, [snapshotAnnualConsumptionKwh, snapshotMode]);
+
+  useEffect(() => {
+    if (!propertyId || snapshotMode) return;
     let active = true;
     setConsumptionLoading(true);
     setConsumptionError("");
@@ -42,6 +64,7 @@ export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
       if (active) {
         setAnnualText(consumption ? String(consumption.annualConsumptionKwh) : "");
         setConsumptionLoading(false);
+        onChangeRef.current?.(consumption?.annualConsumptionKwh ?? null);
       }
     }).catch((cause: unknown) => {
       if (active) {
@@ -50,7 +73,7 @@ export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
       }
     });
     return () => { active = false; };
-  }, [propertyId, retry]);
+  }, [propertyId, retry, snapshotMode]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -65,9 +88,12 @@ export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
     }
     setSaving(true);
     try {
-      const result = await saveHouseholdConsumption(propertyId, annualConsumptionKwh);
-      setAnnualText(String(result.annualConsumptionKwh));
-      setSaveMessage("Annual household consumption saved.");
+      const saved = snapshotMode ? annualConsumptionKwh
+        : (await saveHouseholdConsumption(propertyId, annualConsumptionKwh)).annualConsumptionKwh;
+      setAnnualText(String(saved));
+      onChangeRef.current?.(saved);
+      setSaveMessage(snapshotMode ? "Consumption updated in this analysis draft."
+        : "Annual household consumption saved.");
     } catch (cause) {
       setSaveMessage(cause instanceof Error ? cause.message : "Could not save consumption.");
     } finally {
@@ -85,18 +111,22 @@ export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
           : <form className="consumption-form" onSubmit={save} noValidate>
             <label>Annual household consumption (kWh)
               <input type="number" min="0" max="10000000" step="0.01" value={annualText}
-                onChange={(event) => setAnnualText(event.target.value)} />
+                disabled={readOnly} onChange={(event) => setAnnualText(event.target.value)} />
             </label>
             <p className="muted">Enter your kWh usage directly. Dollar bills do not reveal precise kWh consumption. Monthly usage can be added later.</p>
-            <button type="submit" disabled={saving}>{saving ? "Saving…" : "Save consumption"}</button>
+            {!readOnly && <button type="submit" disabled={saving}>{saving ? "Saving…" : "Save consumption"}</button>}
             {saveMessage && <p role="status">{saveMessage}</p>}
           </form>}
     {!tariffLoading && <div className="tariff-empty-state" role="status">
-      <strong>{!tariffStatus ? "Tariff status unavailable"
+      <strong>{snapshotMode ? economicsSnapshot ? "Saved economics estimate" : "Economics estimate unavailable"
+        : !tariffStatus ? "Tariff status unavailable"
         : tariffStatus.configured || tariffStatus.verifiedRateInputs.length
           ? "Economics estimate unavailable" : "Tariff data not configured"}</strong>
-      <p>Annual kWh and monthly production cannot determine self-consumption or hourly credits. A full estimate also needs the customer's billing details and applicable charge and settlement rules.</p>
-      {tariffStatus && tariffStatus.verifiedRateInputs.length > 0 && <div>
+      <p>{snapshotMode
+        ? "These values reflect what was saved with this analysis. Unavailable values were not calculated at save time."
+        : "Annual kWh and monthly production cannot determine self-consumption or hourly credits. A full estimate also needs the customer's billing details and applicable charge and settlement rules."}</p>
+      {snapshotMode && tariffSnapshot && <p>Saved tariff reference: {tariffSnapshot.utility} {tariffSnapshot.planId}, {tariffSnapshot.version}.</p>}
+      {!snapshotMode && tariffStatus && tariffStatus.verifiedRateInputs.length > 0 && <div>
         <h3>Verified rate inputs</h3>
         <ul>{tariffStatus.verifiedRateInputs.map((rate) => <li key={rate.component}>
           {rate.component === "import" ? "Import" : "Export"}: {rate.version}
@@ -104,11 +134,20 @@ export function EconomicsPanel({ propertyId }: { propertyId: string | null }) {
         </li>)}</ul>
       </div>}
       <div className="economics-metrics" aria-label="Unavailable estimates">
-        {unavailableMetrics.map(([label, unit]) => <div className="economics-metric" key={label}>
-          <span>ESTIMATE · {label}</span><strong>Unavailable</strong><small>{unit}</small>
-        </div>)}
+        {unavailableMetrics.map(([label, unit, field]) => {
+          const value = snapshotMode ? economicsSnapshot?.[field] ?? null : null;
+          return <div className="economics-metric" key={label}>
+            <span>ESTIMATE · {label}</span><strong>{value === null ? "Unavailable"
+              : unit === "USD" ? usd.format(value) : kwh.format(value)}</strong><small>{unit}</small>
+          </div>;
+        })}
+        {snapshotMode && economicsSnapshot?.estimatedAnnualSavingsUsd !== null
+          && economicsSnapshot?.estimatedAnnualSavingsUsd !== undefined && <div className="economics-metric">
+            <span>ESTIMATE · Estimated Annual Savings</span>
+            <strong>{usd.format(economicsSnapshot.estimatedAnnualSavingsUsd)}</strong><small>USD</small>
+          </div>}
       </div>
-      {tariffStatus && <>
+      {!snapshotMode && tariffStatus && <>
         <h3>What is needed</h3>
         <ul>{tariffStatus.missing.map((gap) => <li key={gap}>{gap}</li>)}</ul>
         <p className="muted">Verified rules: {tariffStatus.sources.map((source, index) => <span key={source.title}>

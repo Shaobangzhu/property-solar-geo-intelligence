@@ -5,6 +5,7 @@ import type { PropertyStore } from "../src/properties.js";
 import type { RoofProfileInput, RoofProfileRecord, RoofProfileStore } from "../src/roofProfiles.js";
 
 const properties: PropertyStore = {
+  findById: async () => null,
   findByAddress: async () => null,
   createIfAbsent: async () => { throw new Error("Not used in roof tests"); },
   updateDetails: async () => null,

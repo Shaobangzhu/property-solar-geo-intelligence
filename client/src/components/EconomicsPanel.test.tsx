@@ -84,4 +84,33 @@ describe("EconomicsPanel", () => {
     expect(await screen.findByText("Tariff status unavailable")).toBeInTheDocument();
     expect(screen.getAllByText("Unavailable")).toHaveLength(5);
   });
+
+  it("restores saved consumption and economics without requesting current property values", () => {
+    render(<EconomicsPanel propertyId="property-1" snapshot={{ annualConsumptionKwh: 6200 }}
+      tariffSnapshot={{ utility: "SCE", planId: "TOU-D-PRIME", version: "test-version",
+        effectiveFrom: "2026-06-25" }}
+      economicsSnapshot={{ estimatedAnnualElectricityCostUsd: 1234,
+        estimatedAnnualSolarValueUsd: null, estimatedAnnualGridImportKwh: null,
+        estimatedAnnualGridExportKwh: null, estimatedAnnualExportCreditUsd: null,
+        estimatedAnnualSavingsUsd: 456 }} readOnly />);
+    expect(screen.getByRole("spinbutton", { name: "Annual household consumption (kWh)" })).toHaveValue(6200);
+    expect(screen.getByText("$1,234.00")).toBeInTheDocument();
+    expect(screen.getByText("$456.00")).toBeInTheDocument();
+    expect(screen.getByText(/Saved tariff reference: SCE TOU-D-PRIME, test-version/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save consumption" })).not.toBeInTheDocument();
+    expect(loadHouseholdConsumption).not.toHaveBeenCalled();
+    expect(loadTariffStatus).not.toHaveBeenCalled();
+  });
+
+  it("edits consumption in a run draft without changing the property-level record", async () => {
+    const onChange = vi.fn();
+    render(<EconomicsPanel propertyId="property-1" snapshot={{ annualConsumptionKwh: 6200 }}
+      onChange={onChange} />);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Annual household consumption (kWh)" }),
+      { target: { value: "7000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save consumption" }));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(7000));
+    expect(saveHouseholdConsumption).not.toHaveBeenCalled();
+    expect(loadHouseholdConsumption).not.toHaveBeenCalled();
+  });
 });

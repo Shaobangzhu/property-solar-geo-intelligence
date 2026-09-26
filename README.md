@@ -2,9 +2,9 @@
 
 Local-first Web GIS Proof of Concept for evaluating rooftop solar potential for one residential property at a time.
 
-## Current scope: M7B Verified SCE Tariff Inputs
+## Current scope: M8 Saved Analysis and History
 
-The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. A Roof Profile stores user-adjustable planning assumptions and an optional visual roof outline. The Sunlight & Shadow panel lets you visually explore the 3D scene at different dates and times. PVWatts estimates monthly solar generation, and historical bill entry records actual monthly bill dollars. The Economics panel records a separate annual household consumption assumption and waits for verified tariff and time-aligned energy data before showing any dollar estimate.
+The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. A Roof Profile stores user-adjustable planning assumptions and an optional visual roof outline. The Sunlight & Shadow panel lets you visually explore the 3D scene at different dates and times. PVWatts estimates monthly solar generation, and historical bill entry records actual monthly bill dollars. The Economics panel records a separate annual household consumption assumption and waits for verified tariff and time-aligned energy data before showing any dollar estimate. **Save Analysis** stores a run-specific snapshot in PostgreSQL; **History** lets you view, edit, search, and delete saved runs.
 
 ### Prerequisites
 
@@ -34,7 +34,7 @@ docker compose logs postgres
 npm run prisma:migrate:deploy
 ```
 
-Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the Property, RoofProfile, SolarSystemConfiguration, MonthlyElectricityBill, and HouseholdConsumption migrations; do not create the tables manually.
+Wait until `docker compose ps` reports PostgreSQL as healthy before running Prisma migrations or starting the backend. Prisma applies the Property, RoofProfile, SolarSystemConfiguration, MonthlyElectricityBill, HouseholdConsumption, and AnalysisRun migrations; do not create the tables manually. After updating an existing M7B checkout to M8, run `npm run prisma:migrate:deploy` before starting the app so History can use the new table. The same migration command must run against the destination PostgreSQL database before starting a deployed M8 backend.
 
 For normal development, run `docker compose up -d postgres` first, `npm --prefix server run dev` in one terminal, and `npm --prefix client run dev` in another. The database survives Express, Vite, and container restarts.
 
@@ -88,3 +88,24 @@ The **Economics Estimate** panel records one annual household consumption assump
 M7B includes the supplied filed TOU-D-PRIME energy-rate snapshot effective June 25, 2026, and the 2026 hourly generation and delivery Energy Export Credit rows from the supplied NBT26 MIDAS file. Both retain their source and version metadata. The server can quote these rates for an eligible, bundled SCE NBT26 interval and calculate separate import energy charges and **gross** export-credit accrual; this is not a full bill or an applied credit. `/api/economics/tariff-status` reports the verified inputs, while the five requested annual metrics remain **ESTIMATE — Unavailable** because the app lacks the customer's confirmed tariff and NBT26 eligibility, co-timed load and solar profiles, and complete billing/settlement inputs. An arbitrary `TARIFF_CATALOG_PATH` JSON file cannot self-certify SCE estimates; a complete tariff record must be reconciled with official sources and explicitly reviewed in code. See [utility economics methodology](docs/utility-economics-methodology.md) for exact sheet references, rates, source hashes, assumptions, and remaining gaps.
 
 The checked-in 2026 export-rate module can be reproduced with `python3 server/scripts/importSceNbt26.py '/path/to/NBT26 MIDAS File.csv'`. The importer requires the exact reviewed source checksum and validates both hourly components, units, coverage, local labels, holidays, and daylight-saving transitions. A revised source file requires review before its checksum or rates are updated.
+
+## Saved analyses and History (M8)
+
+On `/analyze`, load a property, save a Roof Profile and Solar System configuration, and run a PVWatts production estimate. Wait for the historical-bill and annual-consumption inputs to load. **Save Analysis** then creates a new `AnalysisRun`; each save from a new analysis creates a separate run, so one property can have many runs. The selected bill year is retained even when no monthly bills were entered (`monthlyAmounts: null`); annual household consumption may also be absent. Saving requires the property, roof assumptions, system assumptions, and a completed production estimate. It does not calculate missing electricity economics.
+
+An AnalysisRun stores a JSONB snapshot of the displayed property details and coordinates, roof assumptions and outline, solar configuration, monthly and annual PVWatts production and warnings, the selected bill year with twelve bill values or `null` when none were entered, annual household consumption when present, and tariff/economics fields if supported. The current M7B workflow saves those tariff/economics fields as `null`: verified rate inputs alone do not support a customer-specific annual dollar result. The row also retains its Property relation, system size, annual production, and timestamps. Viewing a saved run restores its snapshot, including the map location, even if the property's current profile or electricity inputs later change. Deleting a Property also deletes its related runs.
+
+Open `/history` to see saved runs ordered newest first. The table shows property address, system size, annual production, estimated annual savings when available, and creation time. Search filters by address. **View** opens a read-only snapshot on Analyze. **Edit** opens that specific run as a draft; **Save Changes** updates only that run. Changes to its roof, solar, bill, and consumption assumptions do not update the property's current records or another saved run. Editing production uses the backend-only PVWatts preview endpoint with the run's frozen coordinates and draft roof/system settings; **Save Changes** keeps the new estimate with that run. A fresh PVWatts call can differ from its previously saved result. **Delete** requires confirmation and removes the row immediately; a run deleted elsewhere is handled as already deleted.
+
+The local API routes are:
+
+| Action | Endpoint |
+| --- | --- |
+| List saved runs | `GET /api/analysis-runs` |
+| Load one run | `GET /api/analysis-runs/:id` |
+| Create a run | `POST /api/analysis-runs` |
+| Update one run | `PUT /api/analysis-runs/:id` |
+| Delete one run | `DELETE /api/analysis-runs/:id` |
+| Preview production for edited assumptions | `POST /api/solar/estimate-preview` |
+
+The API validates the snapshot and rejects updates that try to move a run to another Property. Missing runs return 404. Annual tariff and economics output fields remain unsupported until the required customer eligibility, interval energy data, and billing rules are available. To run the optional database CRUD/integrity test after applying migrations, use `RUN_DB_TESTS=1 npm --prefix server run test -- analysisRuns.db.test.ts`.

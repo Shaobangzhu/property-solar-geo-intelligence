@@ -60,4 +60,47 @@ describe("HistoricalBillsPanel", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("March");
     expect(saveMonthlyBills).not.toHaveBeenCalled();
   });
+
+  it("edits a saved-run bill snapshot without touching property-level bills", async () => {
+    const onChange = vi.fn();
+    render(<HistoricalBillsPanel propertyId="property-1"
+      snapshot={{ year, monthlyAmounts: Array(12).fill(20) }} onChange={onChange} />);
+    expect(await screen.findByRole("img")).toBeInTheDocument();
+    expect(loadMonthlyBills).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Enter Monthly Bills" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "January bill (USD)" }), { target: { value: "44" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(year, [44, ...Array(11).fill(20)]));
+    expect(saveMonthlyBills).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Bill year" }),
+      { target: { value: String(year - 1) } });
+    expect(onChange).toHaveBeenCalledWith(year - 1, null);
+    expect(loadMonthlyBills).not.toHaveBeenCalled();
+  });
+
+  it("shows saved bills without edit controls in view mode", () => {
+    render(<HistoricalBillsPanel propertyId="property-1"
+      snapshot={{ year, monthlyAmounts: Array(12).fill(0) }} readOnly />);
+    expect(screen.getByRole("img")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enter Monthly Bills" })).not.toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "Bill year" })).toBeDisabled();
+    expect(loadMonthlyBills).not.toHaveBeenCalled();
+  });
+
+  it("reports when the selected year is ready for an analysis snapshot", async () => {
+    const onReadyChange = vi.fn();
+    render(<HistoricalBillsPanel propertyId="property-1"
+      snapshot={{ year, monthlyAmounts: null }} onReadyChange={onReadyChange} />);
+    await waitFor(() => expect(onReadyChange).toHaveBeenLastCalledWith(true));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Bill year" }),
+      { target: { value: "1899" } });
+    await waitFor(() => expect(onReadyChange).toHaveBeenLastCalledWith(false));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Bill year" }),
+      { target: { value: String(year - 1) } });
+    await waitFor(() => expect(onReadyChange).toHaveBeenLastCalledWith(true));
+    fireEvent.click(screen.getByRole("button", { name: "Enter Monthly Bills" }));
+    await waitFor(() => expect(onReadyChange).toHaveBeenLastCalledWith(false));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(onReadyChange).toHaveBeenLastCalledWith(true));
+  });
 });

@@ -6,6 +6,7 @@ import type { PropertyStore } from "../src/properties.js";
 import type { RoofProfileStore } from "../src/roofProfiles.js";
 
 const store: PropertyStore = {
+  findById: async () => null,
   findByAddress: async () => null,
   createIfAbsent: async () => { throw new Error("Not used by health test"); },
   updateDetails: async () => null,

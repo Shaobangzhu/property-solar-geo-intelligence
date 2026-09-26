@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState,
+  type ChangeEventHandler, type FormEvent, type ReactNode } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { EnergyProductionPanel } from "../components/EnergyProductionPanel";
 import { EconomicsPanel } from "../components/EconomicsPanel";
 import { HistoricalBillsPanel } from "../components/HistoricalBillsPanel";
@@ -13,12 +15,20 @@ import {
   loadSolarSystem,
   loadRoofProfile,
   estimateSolarProduction,
+  estimateSolarPreview,
+  getAnalysisRun,
+  createAnalysisRun,
+  updateAnalysisRun,
   saveGeocodedProperty,
   saveRoofProfile,
   saveSolarSystem,
   updatePropertyDetails,
   type Property,
   type PropertyDetails,
+  type AnalysisRun,
+  type AnalysisRunInput,
+  type AnalysisEconomics,
+  type AnalysisTariffReference,
   type RoofProfile,
   type RoofProfileInput,
   type SolarEstimateResult,
@@ -38,14 +48,56 @@ type RoofState = {
 
 type SolarState = { propertyId: string; system: SolarSystem | null; loading: boolean; error: string };
 type EstimateState = { propertyId: string; result: SolarEstimateResult | null; loading: boolean; error: string };
+type BillsDraft = { year: number; monthlyAmounts: number[] | null };
+const defaultBillYear = () => new Date().getFullYear() - 1;
 
-function OptionalDetails({ property, onSaved }: { property: Property; onSaved: (property: Property) => void }) {
+function profileFromRun(run: AnalysisRun): RoofProfile {
+  return { ...run.roofProfile, id: `run-${run.id}-roof`, propertyId: run.propertyId,
+    createdAt: run.createdAt, updatedAt: run.updatedAt };
+}
+
+function systemFromRun(run: AnalysisRun): SolarSystem {
+  return { ...run.solarSystem, id: `run-${run.id}-solar`, propertyId: run.propertyId,
+    createdAt: run.createdAt, updatedAt: run.updatedAt };
+}
+
+function roofInput(profile: RoofProfile, geometry: RoofGeometry | null): RoofProfileInput {
+  return { usableAreaSqFt: profile.usableAreaSqFt, tiltDegrees: profile.tiltDegrees,
+    azimuthDegrees: profile.azimuthDegrees, estimatedShadingFactor: profile.estimatedShadingFactor,
+    roofGeometryJson: geometry };
+}
+
+function solarInput(system: SolarSystemInput): SolarSystemInput {
+  return { preset: system.preset, systemCapacityKw: system.systemCapacityKw,
+    systemLossPercent: system.systemLossPercent, moduleType: system.moduleType, arrayType: system.arrayType };
+}
+
+function RunControls({ disabled, children, onChangeCapture }: {
+  disabled: boolean; children: ReactNode; onChangeCapture?: ChangeEventHandler<HTMLFieldSetElement>;
+}) {
+  return <fieldset disabled={disabled} onChangeCapture={onChangeCapture}
+    style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>{children}</fieldset>;
+}
+
+function OptionalDetails({ property, onSaved, readOnly = false }: {
+  property: Property; onSaved: (property: Property) => void; readOnly?: boolean;
+}) {
   const [propertyType, setPropertyType] = useState(property.propertyType ?? "");
   const [yearBuilt, setYearBuilt] = useState(property.yearBuilt?.toString() ?? "");
   const [livingArea, setLivingArea] = useState(property.livingAreaSqFt?.toString() ?? "");
   const [lotSize, setLotSize] = useState(property.lotSizeSqFt?.toString() ?? "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  if (readOnly) {
+    return <div className="details-form" aria-label="Saved property details">
+      <p className="muted">Property details captured with this analysis.</p>
+      {property.propertyType && <p>Property type: {property.propertyType}</p>}
+      {property.yearBuilt !== null && <p>Year built: {property.yearBuilt}</p>}
+      {property.livingAreaSqFt !== null && <p>Living area: {property.livingAreaSqFt} sq ft</p>}
+      {property.lotSizeSqFt !== null && <p>Lot size: {property.lotSizeSqFt} sq ft</p>}
+    </div>;
+  }
 
   async function saveDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,6 +134,12 @@ function OptionalDetails({ property, onSaved }: { property: Property; onSaved: (
 }
 
 export function AnalyzePage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const runId = searchParams.get("runId");
+  const runMode = searchParams.get("mode") === "edit" ? "edit" : "view";
+  const viewingRun = Boolean(runId) && runMode === "view";
+  const editingRun = Boolean(runId) && runMode === "edit";
   const [address, setAddress] = useState("");
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(false);
@@ -95,6 +153,34 @@ export function AnalyzePage() {
   const [solarState, setSolarState] = useState<SolarState | null>(null);
   const [solarRetry, setSolarRetry] = useState(0);
   const [estimateState, setEstimateState] = useState<EstimateState | null>(null);
+  const [savedRun, setSavedRun] = useState<AnalysisRun | null>(null);
+  const [loadedRunKey, setLoadedRunKey] = useState<string | null>(null);
+  const [runLoading, setRunLoading] = useState(Boolean(runId));
+  const [runError, setRunError] = useState("");
+  const [runNotice, setRunNotice] = useState("");
+  const [savingRun, setSavingRun] = useState(false);
+  const [billsDraft, setBillsDraft] = useState<BillsDraft>({ year: defaultBillYear(), monthlyAmounts: null });
+  const [billsLoaded, setBillsLoaded] = useState(false);
+  const [billsReady, setBillsReady] = useState(false);
+  const [annualConsumptionKwh, setAnnualConsumptionKwh] = useState<number | null>(null);
+  const [consumptionLoaded, setConsumptionLoaded] = useState(false);
+  const [economicsDraft, setEconomicsDraft] = useState<AnalysisEconomics | null>(null);
+  const [tariffDraft, setTariffDraft] = useState<AnalysisTariffReference | null>(null);
+  const [pendingPanelEdits, setPendingPanelEdits] = useState({ roof: false, solar: false, consumption: false });
+  const onBillsChange = useCallback((year: number, monthlyAmounts: number[] | null) => {
+    setBillsDraft({ year, monthlyAmounts });
+    setBillsLoaded(true);
+    setEconomicsDraft(null);
+    setTariffDraft(null);
+  }, []);
+  const onBillsReadyChange = useCallback((ready: boolean) => setBillsReady(ready), []);
+  const onConsumptionChange = useCallback((value: number | null) => {
+    setAnnualConsumptionKwh(value);
+    setConsumptionLoaded(true);
+    setEconomicsDraft(null);
+    setTariffDraft(null);
+    setPendingPanelEdits((previous) => ({ ...previous, consumption: false }));
+  }, []);
   const propertyId = property?.id;
   const activePropertyId = useRef(propertyId);
   const estimateGeneration = useRef(0);
@@ -106,9 +192,71 @@ export function AnalyzePage() {
   const roofLoading = Boolean(propertyId) && (!currentRoof || currentRoof.loading);
   const solarLoading = Boolean(propertyId) && (!currentSolar || currentSolar.loading);
   const roofReady = Boolean(currentRoof?.profile);
+  const runReady = !runId || Boolean(savedRun?.id === runId
+    && loadedRunKey === `${runId}:${runMode}` && !runLoading);
+  const canSave = Boolean(propertyId && currentRoof?.profile && currentSolar?.system
+    && currentEstimate?.result && billsLoaded && billsReady && consumptionLoaded
+    && !pendingPanelEdits.roof && !pendingPanelEdits.solar && !pendingPanelEdits.consumption);
 
   useEffect(() => {
-    if (!propertyId) return;
+    if (!runId) {
+      setSavedRun(null);
+      setLoadedRunKey(null);
+      setRunLoading(false);
+      setRunError("");
+      return;
+    }
+    let active = true;
+    setRunLoading(true);
+    setRunError("");
+    setSavedRun(null);
+    setLoadedRunKey(null);
+    setBillsReady(false);
+    setPendingPanelEdits({ roof: false, solar: false, consumption: false });
+    estimateGeneration.current += 1;
+    void getAnalysisRun(runId).then((run) => {
+      if (!active) return;
+      setSavedRun(run);
+      setLoadedRunKey(`${runId}:${runMode}`);
+      setProperty(run.property);
+      setAddress(run.property.displayAddress);
+      setRoofState({ propertyId: run.propertyId, profile: profileFromRun(run),
+        geometry: run.roofProfile.roofGeometryJson, loading: false, error: "" });
+      setSolarState({ propertyId: run.propertyId, system: systemFromRun(run), loading: false, error: "" });
+      setEstimateState({ propertyId: run.propertyId, result: run.production, loading: false, error: "" });
+      setBillsDraft({ year: run.bills.year,
+        monthlyAmounts: run.bills.monthlyAmounts ? [...run.bills.monthlyAmounts] : null });
+      setBillsLoaded(true);
+      setBillsReady(false);
+      setAnnualConsumptionKwh(run.annualConsumptionKwh);
+      setConsumptionLoaded(true);
+      setEconomicsDraft(run.economics);
+      setTariffDraft(run.tariffReference);
+      setSunlight(createDefaultSunlightSettings());
+      setRunLoading(false);
+    }).catch((cause: unknown) => {
+      if (!active) return;
+      setProperty(null);
+      setRunError(cause instanceof Error ? cause.message : "Could not load this saved analysis.");
+      setRunLoading(false);
+    });
+    return () => { active = false; };
+  }, [runId, runMode]);
+
+  useEffect(() => {
+    if (runId) return;
+    setPendingPanelEdits({ roof: false, solar: false, consumption: false });
+    setBillsDraft({ year: defaultBillYear(), monthlyAmounts: null });
+    setBillsLoaded(false);
+    setBillsReady(false);
+    setAnnualConsumptionKwh(null);
+    setConsumptionLoaded(false);
+    setEconomicsDraft(null);
+    setTariffDraft(null);
+  }, [propertyId, runId]);
+
+  useEffect(() => {
+    if (!propertyId || runId) return;
     let active = true;
     setRoofSketchError("");
     setSunlight(createDefaultSunlightSettings());
@@ -125,10 +273,10 @@ export function AnalyzePage() {
       });
     });
     return () => { active = false; };
-  }, [propertyId, roofRetry]);
+  }, [propertyId, roofRetry, runId]);
 
   useEffect(() => {
-    if (!propertyId) return;
+    if (!propertyId || runId) return;
     let active = true;
     estimateGeneration.current += 1;
     setSolarState({ propertyId, system: null, loading: true, error: "" });
@@ -140,26 +288,47 @@ export function AnalyzePage() {
         error: cause instanceof Error ? cause.message : "Could not load the Solar System." });
     });
     return () => { active = false; };
-  }, [propertyId, solarRetry]);
+  }, [propertyId, solarRetry, runId]);
 
   async function saveCurrentRoof(input: RoofProfileInput) {
     if (!propertyId) return;
+    if (runId && !editingRun) return;
     estimateGeneration.current += 1;
     setEstimateState((previous) => previous?.propertyId === propertyId
       ? { ...previous, result: null, loading: false, error: "" } : previous);
+    if (runId) {
+      setEconomicsDraft(null);
+      setTariffDraft(null);
+      setRoofState((previous) => previous?.propertyId === propertyId && previous.profile
+        ? { propertyId, profile: { ...previous.profile, ...input },
+          geometry: input.roofGeometryJson, loading: false, error: "" } : previous);
+      setPendingPanelEdits((previous) => ({ ...previous, roof: false }));
+      return;
+    }
     const profile = await saveRoofProfile(propertyId, input);
     setRoofState((previous) => previous && previous.propertyId === propertyId
       ? { ...previous, profile, geometry: profile.roofGeometryJson } : previous);
     setEstimateState((previous) => previous && previous.propertyId === propertyId
       ? { ...previous, result: null, error: "", loading: false } : previous);
+    setPendingPanelEdits((previous) => ({ ...previous, roof: false }));
   }
 
-  async function runEstimate(forPropertyId = propertyId) {
-    if (!forPropertyId || activePropertyId.current !== forPropertyId) return;
+  async function runEstimate(forPropertyId = propertyId, solarOverride?: SolarSystemInput) {
+    if (!forPropertyId || activePropertyId.current !== forPropertyId || viewingRun) return;
     const generation = ++estimateGeneration.current;
+    if (runId) {
+      setEconomicsDraft(null);
+      setTariffDraft(null);
+    }
     setEstimateState({ propertyId: forPropertyId, result: null, loading: true, error: "" });
     try {
-      const result = await estimateSolarProduction(forPropertyId);
+      let result: SolarEstimateResult;
+      if (runId) {
+        const roof = currentRoof?.profile;
+        const system = solarOverride ?? currentSolar?.system;
+        if (!roof || !system) throw new Error("Complete the roof and solar assumptions before estimating production.");
+        result = await estimateSolarPreview(forPropertyId, roofInput(roof, roofGeometry), solarInput(system), runId);
+      } else result = await estimateSolarProduction(forPropertyId);
       setEstimateState((previous) => previous?.propertyId === forPropertyId && activePropertyId.current === forPropertyId
         && estimateGeneration.current === generation
         ? { propertyId: forPropertyId, result, loading: false, error: "" } : previous);
@@ -173,18 +342,30 @@ export function AnalyzePage() {
 
   async function saveCurrentSolar(input: SolarSystemInput) {
     if (!propertyId) return;
+    if (runId && !editingRun) return;
     estimateGeneration.current += 1;
     setEstimateState((previous) => previous?.propertyId === propertyId
       ? { ...previous, result: null, loading: false, error: "" } : previous);
+    if (runId) {
+      setEconomicsDraft(null);
+      setTariffDraft(null);
+      setSolarState((previous) => previous?.propertyId === propertyId && previous.system
+        ? { propertyId, system: { ...previous.system, ...input }, loading: false, error: "" } : previous);
+      setPendingPanelEdits((previous) => ({ ...previous, solar: false }));
+      if (roofReady) await runEstimate(propertyId, input);
+      return;
+    }
     const system = await saveSolarSystem(propertyId, input);
     if (activePropertyId.current !== propertyId) return;
     setSolarState((previous) => previous?.propertyId === propertyId
       ? { propertyId, system, loading: false, error: "" } : previous);
     setEstimateState({ propertyId, result: null, loading: false, error: "" });
+    setPendingPanelEdits((previous) => ({ ...previous, solar: false }));
     if (roofReady) await runEstimate(propertyId);
   }
 
   function updateRoofGeometry(geometry: RoofGeometry | null) {
+    if (viewingRun) return;
     setRoofSketchError("");
     setRoofState((previous) => previous && previous.propertyId === propertyId && !previous.loading
       ? { ...previous, geometry } : previous);
@@ -192,6 +373,7 @@ export function AnalyzePage() {
 
   async function locateProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (runId) return;
     const requestedAddress = address.trim().replace(/\s+/gu, " ");
     if (requestedAddress.length < 5 || requestedAddress.length > 200) {
       setError("Enter a valid property address (5–200 characters).");
@@ -221,25 +403,105 @@ export function AnalyzePage() {
     }
   }
 
+  function startNewAnalysis() {
+    estimateGeneration.current += 1;
+    setProperty(null);
+    setAddress("");
+    setRoofState(null);
+    setSolarState(null);
+    setEstimateState(null);
+    setRunNotice("");
+    setPendingPanelEdits({ roof: false, solar: false, consumption: false });
+    setNotice("");
+    setError("");
+    navigate("/analyze");
+  }
+
+  async function saveAnalysis() {
+    if (!propertyId || !currentRoof?.profile || !currentSolar?.system || !currentEstimate?.result) {
+      setRunError("Complete the Roof Profile, Solar System, and production estimate before saving.");
+      return;
+    }
+    if (!billsLoaded || !billsReady || !consumptionLoaded) {
+      setRunError("Wait for the electricity inputs to finish loading before saving.");
+      return;
+    }
+    const input: AnalysisRunInput = {
+      propertyId,
+      roofProfile: roofInput(currentRoof.profile, roofGeometry),
+      solarSystem: solarInput(currentSolar.system),
+      production: currentEstimate.result,
+      bills: { year: billsDraft.year,
+        monthlyAmounts: billsDraft.monthlyAmounts ? [...billsDraft.monthlyAmounts] : null },
+      annualConsumptionKwh,
+      tariffReference: tariffDraft,
+      economics: economicsDraft,
+    };
+    setSavingRun(true);
+    setRunError("");
+    setRunNotice("");
+    try {
+      if (editingRun && runId) {
+        const updated = await updateAnalysisRun(runId, input);
+        setSavedRun(updated);
+        setRunNotice("Changes saved to this analysis.");
+      } else {
+        const created = await createAnalysisRun(input);
+        setRunNotice("Analysis saved to History.");
+        navigate(`/analyze?runId=${encodeURIComponent(created.id)}&mode=edit`, { replace: true });
+      }
+    } catch (cause) {
+      setRunError(cause instanceof Error ? cause.message : "Could not save this analysis.");
+    } finally {
+      setSavingRun(false);
+    }
+  }
+
   return (
     <section aria-labelledby="analyze-title" className="page">
       <div className="page-heading">
         <p className="eyebrow">ONE PROPERTY AT A TIME</p>
-        <h1 id="analyze-title">Analyze property solar potential</h1>
-        <p>Start by locating a residential property.</p>
+        <h1 id="analyze-title">{runId ? runMode === "edit" ? "Edit saved analysis" : "View saved analysis"
+          : "Analyze property solar potential"}</h1>
+        <p>{runId ? "This analysis preserves the assumptions and results from when it was saved."
+          : "Start by locating a residential property."}</p>
       </div>
-      <section className="search-panel" aria-labelledby="property-search-title">
-        <h2 id="property-search-title">Property Search</h2>
-        <form onSubmit={locateProperty} className="search-row">
-          <input aria-label="Property address" placeholder="Enter a property address" value={address} onChange={(event) => setAddress(event.target.value)} disabled={loading} required maxLength={200} />
-          <button type="submit" disabled={loading}>{loading ? "Locating…" : "Load / Locate Property"}</button>
-        </form>
-        {notice && <p role="status">{notice}</p>}
-        {error && <p role="alert" className="error-message">{error}</p>}
-      </section>
-      <div className="analysis-layout">
+      {runId ? <section className="search-panel" aria-label="Saved analysis controls">
+        <p>{runMode === "edit" ? "Editing this saved run. Changes are kept here until you choose Save Changes."
+          : "Viewing this saved run."}</p>
+        <div className="search-row">
+          <Link to="/history">Back to History</Link>
+          {viewingRun && savedRun && <Link to={`/analyze?runId=${encodeURIComponent(runId)}&mode=edit`}>Edit analysis</Link>}
+          {editingRun && savedRun && <Link to={`/analyze?runId=${encodeURIComponent(runId)}&mode=view`}>View saved version</Link>}
+          <button type="button" onClick={startNewAnalysis}>Start new analysis</button>
+        </div>
+      </section> : <section className="search-panel" aria-labelledby="property-search-title">
+          <h2 id="property-search-title">Property Search</h2>
+          <form onSubmit={locateProperty} className="search-row">
+            <input aria-label="Property address" placeholder="Enter a property address" value={address} onChange={(event) => setAddress(event.target.value)} disabled={loading} required maxLength={200} />
+            <button type="submit" disabled={loading}>{loading ? "Locating…" : "Load / Locate Property"}</button>
+          </form>
+          {notice && <p role="status">{notice}</p>}
+          {error && <p role="alert" className="error-message">{error}</p>}
+        </section>}
+      {runId && !runReady && !runError && <p role="status">Loading saved analysis…</p>}
+      {runId && runError && !savedRun && <p role="alert" className="error-message">{runError}</p>}
+      {runReady && property && !viewingRun && <section className="search-panel" aria-label="Save analysis controls"
+        style={{ marginTop: "1rem" }}>
+        <button type="button" onClick={() => { void saveAnalysis(); }} disabled={savingRun || !canSave}>
+          {savingRun ? "Saving…" : editingRun ? "Save Changes" : "Save Analysis"}
+        </button>
+        {editingRun && <p className="muted">Apply roof or system edits in their panels, recalculate production, then Save Changes.</p>}
+        {(pendingPanelEdits.roof || pendingPanelEdits.solar || pendingPanelEdits.consumption)
+          && <p className="muted">Apply pending roof, system, or consumption form edits before saving this analysis.</p>}
+        {!canSave && !pendingPanelEdits.roof && !pendingPanelEdits.solar && !pendingPanelEdits.consumption
+          && <p className="muted">Complete the roof, solar system, production estimate, and load electricity inputs before saving.</p>}
+        {runNotice && <p role="status">{runNotice}</p>}
+        {runError && <p role="alert" className="error-message">{runError}</p>}
+      </section>}
+      {runReady && <div className="analysis-layout">
         <PropertyVisualization property={property} roofGeometry={roofGeometry}
-          canSketch={Boolean(currentRoof && !currentRoof.loading && !currentRoof.error)}
+          canSketch={!viewingRun && Boolean(currentRoof && !currentRoof.loading && !currentRoof.error)}
           sunlight={sunlight} sunlightError={sunlightError} onSunlightError={setSunlightError}
           onRoofGeometryChange={updateRoofGeometry} onRoofSketchError={setRoofSketchError}
           roofSketchError={roofSketchError} />
@@ -252,27 +514,43 @@ export function AnalyzePage() {
                 <p>Coordinates: {hasValidCoordinates(property)
                   ? `${property.latitude.toFixed(6)}, ${property.longitude.toFixed(6)}`
                   : "Unavailable"}</p>
-                <OptionalDetails key={property.id} property={property} onSaved={setProperty} />
+                <OptionalDetails key={`${property.id}-${runId ?? "live"}`} property={property}
+                  onSaved={setProperty} readOnly={Boolean(runId)} />
               </div>
             ) : <p>No property loaded.</p>}
           </section>
-          <RoofProfilePanel key={`roof-${propertyId ?? "none"}`} property={property} profile={currentRoof?.profile ?? null}
-            geometry={roofGeometry} loading={roofLoading} error={currentRoof?.error ?? ""}
-            onRetry={() => setRoofRetry((count) => count + 1)} onSave={saveCurrentRoof}
-            onClearGeometry={() => updateRoofGeometry(null)} />
+          <RunControls disabled={viewingRun} onChangeCapture={() => setPendingPanelEdits((previous) => ({ ...previous, roof: true }))}>
+            <RoofProfilePanel key={`roof-${propertyId ?? "none"}-${runId ?? "live"}-${runMode}`} property={property}
+              profile={currentRoof?.profile ?? null} geometry={roofGeometry} loading={roofLoading}
+              error={currentRoof?.error ?? ""} onRetry={() => setRoofRetry((count) => count + 1)}
+              onSave={saveCurrentRoof} onClearGeometry={() => updateRoofGeometry(null)} />
+          </RunControls>
           <SunlightShadowPanel propertyLoaded={Boolean(property)} hasRoofOutline={Boolean(roofGeometry)}
             settings={sunlight} onChange={setSunlight} />
-          <SolarSystemPanel key={`solar-${propertyId ?? "none"}`} propertyLoaded={Boolean(property)}
-            system={currentSolar?.system ?? null} loading={solarLoading} error={currentSolar?.error ?? ""}
-            roofReady={roofReady} onRetry={() => setSolarRetry((count) => count + 1)} onSave={saveCurrentSolar} />
-          <EnergyProductionPanel propertyLoaded={Boolean(property)} roofReady={roofReady}
-            systemReady={Boolean(currentSolar?.system)} loading={currentEstimate?.loading ?? false}
-            error={currentEstimate?.error ?? ""} result={currentEstimate?.result ?? null}
-            onEstimate={() => { void runEstimate(); }} />
-          <HistoricalBillsPanel key={`bills-${propertyId ?? "none"}`} propertyId={propertyId ?? null} />
-          <EconomicsPanel key={`economics-${propertyId ?? "none"}`} propertyId={propertyId ?? null} />
+          <RunControls disabled={viewingRun} onChangeCapture={() => setPendingPanelEdits((previous) => ({ ...previous, solar: true }))}>
+            <SolarSystemPanel key={`solar-${propertyId ?? "none"}-${runId ?? "live"}-${runMode}`}
+              propertyLoaded={Boolean(property)} system={currentSolar?.system ?? null} loading={solarLoading}
+              error={currentSolar?.error ?? ""} roofReady={roofReady}
+              onRetry={() => setSolarRetry((count) => count + 1)} onSave={saveCurrentSolar} />
+          </RunControls>
+          <RunControls disabled={viewingRun}>
+            <EnergyProductionPanel propertyLoaded={Boolean(property)} roofReady={roofReady}
+              systemReady={Boolean(currentSolar?.system)} loading={currentEstimate?.loading ?? false}
+              error={currentEstimate?.error ?? ""} result={currentEstimate?.result ?? null}
+              onEstimate={() => { void runEstimate(); }} />
+          </RunControls>
+          <HistoricalBillsPanel key={`bills-${propertyId ?? "none"}-${runId ?? "live"}-${runMode}`}
+            propertyId={propertyId ?? null} snapshot={runId ? billsDraft : undefined}
+            onChange={onBillsChange} onReadyChange={onBillsReadyChange} readOnly={viewingRun} />
+          <RunControls disabled={viewingRun} onChangeCapture={() => setPendingPanelEdits((previous) => ({ ...previous, consumption: true }))}>
+            <EconomicsPanel key={`economics-${propertyId ?? "none"}-${runId ?? "live"}-${runMode}`}
+              propertyId={propertyId ?? null} snapshot={runId ? { annualConsumptionKwh } : undefined}
+              onChange={onConsumptionChange} readOnly={viewingRun}
+              tariffSnapshot={runId ? tariffDraft : undefined}
+              economicsSnapshot={runId ? economicsDraft : undefined} />
+          </RunControls>
         </aside>
-      </div>
+      </div>}
     </section>
   );
 }

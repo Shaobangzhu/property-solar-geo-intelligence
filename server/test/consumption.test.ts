@@ -7,6 +7,7 @@ import type { RoofProfileStore } from "../src/roofProfiles.js";
 import { testTariff } from "./fixtures/testTariff.js";
 
 const properties: PropertyStore = {
+  findById: async () => null,
   findByAddress: async () => null,
   createIfAbsent: async () => { throw new Error("unused"); },
   updateDetails: async () => null,

@@ -1,7 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+
+vi.mock("./propertyApi", async (original) => ({
+  ...await original<typeof import("./propertyApi")>(),
+  listAnalysisRuns: vi.fn().mockResolvedValue([]),
+}));
 
 describe("App", () => {
   it("redirects unknown routes to Analyze", () => {
@@ -9,8 +14,8 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: /analyze property solar potential/i })).toBeInTheDocument();
   });
 
-  it("renders the History empty state", () => {
+  it("renders the History empty state", async () => {
     render(<MemoryRouter initialEntries={["/history"]}><App /></MemoryRouter>);
-    expect(screen.getByText(/no saved analyses yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no saved analyses yet/i)).toBeInTheDocument();
   });
 });

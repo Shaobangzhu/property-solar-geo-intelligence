@@ -6,6 +6,7 @@ import type { PropertyStore } from "../src/properties.js";
 import type { RoofProfileStore } from "../src/roofProfiles.js";
 
 const properties: PropertyStore = {
+  findById: async () => null,
   findByAddress: async () => null,
   createIfAbsent: async () => { throw new Error("unused"); },
   updateDetails: async () => null,
