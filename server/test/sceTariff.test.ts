@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { tariffVersionSchema } from "../src/economics.js";
-import { applySceMonthlyExportCredit, getSceTariffStatus, sceRuleSources,
+import { applySceMonthlyExportCredit, getSceTariffStatus, sceLocalDate, sceRuleSources,
   sceVerifiedRules } from "../src/sceTariff.js";
 import { testTariff } from "./fixtures/testTariff.js";
 
 describe("SCE Net Billing rule boundary", () => {
+  it("selects the tariff date in California, including after UTC midnight", () => {
+    expect(sceLocalDate(new Date("2026-09-25T00:30:00.000Z"))).toBe("2026-09-24");
+    expect(sceLocalDate(new Date("2026-09-25T10:30:00.000Z"))).toBe("2026-09-25");
+  });
+
   it("applies monthly EEC only to eligible energy charges, with remaining credit carried", () => {
     // TEST DATA — NOT CURRENT SCE RATES. This verifies Schedule NBT Sheet 6's application rule.
     expect(applySceMonthlyExportCredit(20, 50, 10)).toEqual({

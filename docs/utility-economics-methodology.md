@@ -1,6 +1,6 @@
 # Utility economics methodology (M7B)
 
-Reviewed September 25, 2026. The supplied SCE filings and NBT26 MIDAS file provide **verified, versioned price inputs** for a limited 2026 SCE scenario. They do not, by themselves, support a property-specific annual bill or savings estimate. The application keeps Estimated Annual Electricity Cost, Estimated Solar Value, Estimated Grid Import, Estimated Grid Export, and Estimated Export Credit labeled **ESTIMATE — Unavailable** until the required customer and time-aligned energy inputs are present. It never presents gross export-credit accrual as guaranteed savings or a cash payout.
+Reviewed September 25, 2026. The supplied SCE filings and NBT26 MIDAS file provide **verified, versioned price inputs** for a limited 2026 SCE scenario. They do not, by themselves, support a property-specific annual bill or savings estimate. The application shows one **Economics estimate unavailable** state; Estimated Annual Electricity Cost, Estimated Solar Value, Estimated Grid Import, Estimated Grid Export, and Estimated Export Credit are not calculated or displayed as individual metrics until the required customer and time-aligned energy inputs are present. It never presents gross export-credit accrual as guaranteed savings or a cash payout.
 
 ## Source register and applicability
 

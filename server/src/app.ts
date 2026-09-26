@@ -8,7 +8,7 @@ import { solarSystemInputSchema, type SolarSystemStore } from "./solarSystems.js
 import { billYearSchema, monthlyBillsInputSchema, type MonthlyBillsStore } from "./monthlyBills.js";
 import { consumptionInputSchema, type ConsumptionStore } from "./consumption.js";
 import type { TariffVersion } from "./economics.js";
-import { getSceTariffStatus } from "./sceTariff.js";
+import { getSceTariffStatus, sceLocalDate } from "./sceTariff.js";
 import { analysisRunInputSchema, type AnalysisRunStore } from "./analysisRuns.js";
 
 const addressSchema = z.string().trim().min(5).max(200);
@@ -236,7 +236,7 @@ export function createApp(properties: PropertyStore, roofProfiles: RoofProfileSt
   });
 
   app.get("/api/economics/tariff-status", (_request, response) => {
-    response.json(getSceTariffStatus(economics?.tariffCatalog ?? [], new Date().toISOString().slice(0, 10)));
+    response.json(getSceTariffStatus(economics?.tariffCatalog ?? [], sceLocalDate(new Date())));
   });
 
   app.get("/api/analysis-runs", async (_request, response) => {
@@ -296,6 +296,11 @@ export function createApp(properties: PropertyStore, roofProfiles: RoofProfileSt
     void next;
     if (error instanceof SyntaxError && "body" in error) {
       response.status(400).json({ error: "Invalid JSON request." });
+      return;
+    }
+    if (typeof error === "object" && error !== null && "type" in error
+      && error.type === "entity.too.large") {
+      response.status(413).json({ error: "Request body is too large." });
       return;
     }
     // Neither error messages nor request bodies are logged: either may contain secrets.

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AnalyzePage } from "./AnalyzePage";
@@ -7,7 +7,8 @@ import { createAnalysisRun, estimateSolarPreview, estimateSolarProduction, getAn
   loadSolarSystem, lookupProperty, saveGeocodedProperty, saveRoofProfile, saveSolarSystem,
   loadMonthlyBills, saveMonthlyBills, loadHouseholdConsumption, saveHouseholdConsumption,
   loadTariffStatus, updateAnalysisRun,
-  type AnalysisRun } from "../propertyApi";
+  updatePropertyDetails,
+  type AnalysisRun, type Property } from "../propertyApi";
 import type { SunlightSettings } from "../sunlight";
 
 vi.mock("../geocode", () => ({ geocodeStoredAddress: vi.fn() }));
@@ -128,10 +129,10 @@ describe("Analyze property search", () => {
 
   it("shows a no-match message without saving", async () => {
     vi.mocked(lookupProperty).mockResolvedValue(null);
-    vi.mocked(geocodeStoredAddress).mockRejectedValue(new Error("No precise residential address was found."));
+    vi.mocked(geocodeStoredAddress).mockRejectedValue(new Error("No precise street address was found."));
     renderAnalyze();
     submitAddress();
-    expect(await screen.findByRole("alert")).toHaveTextContent("No precise residential address was found.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("No precise street address was found.");
     expect(saveGeocodedProperty).not.toHaveBeenCalled();
   });
 
@@ -164,6 +165,28 @@ describe("Analyze property search", () => {
     expect(await screen.findByText(second.displayAddress)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("visualization")).toHaveAttribute("data-time", "12:00"));
     expect(screen.getByTestId("visualization")).toHaveAttribute("data-shadows-enabled", "false");
+  });
+
+  it("does not replace a newer property when an older details save finishes", async () => {
+    const second = { ...property, id: "property-2", displayAddress: "100 Oak St, Redlands, CA" };
+    vi.mocked(lookupProperty).mockResolvedValueOnce(property).mockResolvedValueOnce(second);
+    let finishDetails!: (value: Property) => void;
+    vi.mocked(updatePropertyDetails).mockReturnValue(new Promise((resolve) => { finishDetails = resolve; }));
+    renderAnalyze();
+    submitAddress();
+    expect(await screen.findByText(property.displayAddress)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Property type" }), { target: { value: "House" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save details" }));
+    expect(updatePropertyDetails).toHaveBeenCalledWith(property.id, expect.objectContaining({ propertyType: "House" }));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Property address" }), {
+      target: { value: second.displayAddress },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Load / Locate Property" }));
+    expect(await screen.findByText(second.displayAddress)).toBeInTheDocument();
+    await act(async () => { finishDetails({ ...property, propertyType: "House" }); });
+    expect(screen.getByText(second.displayAddress)).toBeInTheDocument();
+    expect(screen.queryByText(property.displayAddress)).not.toBeInTheDocument();
   });
 
   it("saves a system and shows only backend PVWatts production", async () => {

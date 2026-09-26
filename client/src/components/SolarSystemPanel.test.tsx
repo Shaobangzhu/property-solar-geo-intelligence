@@ -7,6 +7,7 @@ describe("SolarSystemPanel", () => {
     const onSave = vi.fn(async () => {});
     render(<SolarSystemPanel propertyLoaded system={null} loading={false} error=""
       roofReady onRetry={vi.fn()} onSave={onSave} />);
+    expect(screen.getByText(/No Solar System saved yet/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("System size"), { target: { value: "large" } });
     expect(screen.getByLabelText("System capacity (kW)")).toHaveValue(10);
     fireEvent.change(screen.getByLabelText("System capacity (kW)"), { target: { value: "8.5" } });

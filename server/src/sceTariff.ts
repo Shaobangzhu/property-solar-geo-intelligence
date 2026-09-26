@@ -3,6 +3,16 @@ import { hasCurrentTariff, type TariffVersion } from "./economics.js";
 import { sceNbt26Snapshot } from "./sceNbt26.js";
 import { sceTouPrimeSnapshot } from "./sceTouPrime.js";
 
+const sceDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+});
+
+export function sceLocalDate(now: Date): string {
+  const parts = Object.fromEntries(sceDateFormatter.formatToParts(now)
+    .filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 // Filed billing rules and the two separately verified 2026 rate inputs.
 export const sceRuleSources = [
   {

@@ -1,15 +1,33 @@
 # Property Solar Geo Intelligence
 
-Local-first Web GIS Proof of Concept for evaluating rooftop solar potential for one residential property at a time.
+Local-first Web GIS proof of concept (PoC) for evaluating rooftop solar potential for one residential property at a time. It is a planning and interview demonstration, not a roof survey, engineering design, or utility bill quote.
 
-## Current scope: M8 Saved Analysis and History
+## Scope and status
 
-The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. After loading a property, the page shows an interactive ArcGIS Map or terrain-backed 3D scene with a target marker. A Roof Profile stores user-adjustable planning assumptions and an optional visual roof outline. The Sunlight & Shadow panel lets you visually explore the 3D scene at different dates and times. PVWatts estimates monthly solar generation, and historical bill entry records actual monthly bill dollars. The Economics panel records a separate annual household consumption assumption and waits for verified tariff and time-aligned energy data before showing any dollar estimate. **Save Analysis** stores a run-specific snapshot in PostgreSQL; **History** lets you view, edit, search, and delete saved runs.
+| Status | Capability |
+| --- | --- |
+| **IMPLEMENTED** | Property lookup and ArcGIS stored geocoding; Map and terrain-backed 3D; optional roof outline; date/time lighting and visual shadows; manual roof and solar assumptions; backend-only PVWatts V8 monthly estimates; twelve historical bill entries; annual household consumption; AnalysisRun save, view, edit, delete, and address filter. |
+| **IMPLEMENTED** | Versioned, source-referenced SCE TOU-D-PRIME import and NBT26 export-rate inputs, plus narrowly scoped interval calculation primitives. These are verified inputs, not a complete bill or annual savings calculation. |
+| **PLANNED** | Customer-specific annual economics only after tariff eligibility, time-aligned energy, all applicable charges, credit settlement, and tariff versions have been verified. |
+| **DEFERRED** | Automatic roof extraction, measured roof area, and deriving PVWatts shading losses from visual ArcGIS shadows. |
+| **FUTURE** | Broader property and utility coverage. Batch ranking, comparison, portfolio, and authentication are outside this PoC. |
+
+The Economics panel shows a single **Economics estimate unavailable** state instead of fabricated annual figures. Annual consumption, monthly PVWatts production, and historical dollar bills cannot determine hourly self-consumption or a complete SCE bill. See [architecture](docs/architecture.md), [methodology and limitations](docs/methodology-and-limitations.md), and the [reviewed SCE source register](docs/utility-economics-methodology.md).
+
+## Architecture summary
+
+React, TypeScript, Vite, React Router, and ArcGIS Map Components run in the browser. Express validates requests, owns PostgreSQL access through Prisma, and calls PVWatts V8. PostgreSQL stores the current Property, Roof Profile, Solar System, bills, and annual consumption, while each AnalysisRun stores a JSONB snapshot of what was saved. The ArcGIS key is intentionally browser-visible; PVWatts and database credentials stay on the server. The frontend checks the local address registry before requesting ArcGIS stored geocoding. Saved History runs restore their own assumptions and results rather than silently reading later property edits.
+
+## Current workflow
+
+The React/Vite frontend checks a local PostgreSQL property registry first, then uses ArcGIS stored geocoding for a new address. It saves the address and coordinates through the Express API and shows the Property Summary. Analyze places a full-width interactive ArcGIS Map or terrain-backed 3D scene first, followed by the analysis panels and Save Analysis control. A Roof Profile stores user-adjustable planning assumptions and an optional visual roof outline. The Sunlight & Shadow panel lets you visually explore the 3D scene at different dates and times. PVWatts estimates monthly solar generation, and historical bill entry records actual monthly bill dollars. The Economics panel records a separate annual household consumption assumption and waits for verified tariff and time-aligned energy data before showing any dollar estimate. **Save Analysis** stores a run-specific snapshot in PostgreSQL; **History** lets you view, edit, search, and delete saved runs.
 
 ### Prerequisites
 
 - Node.js 24 or later
 - Docker with the Docker Compose plugin for the dedicated local PostgreSQL database
+
+No cloud deployment is required. Live geocoding, basemap/elevation content, and PVWatts estimation still require their external services and appropriate keys.
 
 ### Configure environment variables
 
@@ -61,9 +79,11 @@ npm run prisma:validate
 npm run prisma:migrate:deploy
 ```
 
-Run the migration before searching properties. The frontend runs at Vite's default URL and proxies `/api` requests to the API at `http://localhost:3001`. The health endpoint is `GET /api/health` and responds with `{ "status": "ok" }`.
+Run the migration before searching properties. `npm run dev` uses `concurrently` to start Vite and Express. The frontend runs at Vite's default URL and proxies `/api` requests to the API at `http://127.0.0.1:3001`. The health endpoint is `GET /api/health` and responds with `{ "status": "ok" }`.
 
 Enter a full street address, city, and state on `/analyze`. On a local miss, the browser calls the [ArcGIS Geocoding service](https://developers.arcgis.com/rest/geocode/find-address-candidates/) with `forStorage=true`, then saves one address-level result. Ambiguous or imprecise matches are not saved. Optional property details are manual entries.
+
+Address precision is checked; residential land use, ownership, parcel boundaries, and roof suitability are not verified by this geocode workflow.
 
 The visualization offers exactly two modes: **Map** and **3D**. The 3D scene uses ArcGIS world elevation and an oblique camera. The marker identifies the saved address coordinates; it is not a surveyed roof position or a detailed house model. The browser creates one ArcGIS view per active mode, updates the marker and camera when the property changes, and releases the view when the mode is switched or the page is unmounted.
 
@@ -85,7 +105,7 @@ To run the optional local PostgreSQL integrity test after applying migrations, u
 
 The **Economics Estimate** panel records one annual household consumption assumption in kWh per property through `GET` and `PUT /api/properties/:id/consumption`. It never derives kWh from historical bill dollars. Historical bills, household consumption, PVWatts generation, self-consumption, grid imports, and grid exports remain separate concepts. The tariff domain supports utility and plan identifiers, effective dates and versions, seasons, weekday/weekend time-of-use periods, import rates, and export-credit source/vintage metadata. The synthetic tariff fixture under `server/test/fixtures/` is **TEST DATA — NOT CURRENT SCE RATES** and is never loaded at runtime.
 
-M7B includes the supplied filed TOU-D-PRIME energy-rate snapshot effective June 25, 2026, and the 2026 hourly generation and delivery Energy Export Credit rows from the supplied NBT26 MIDAS file. Both retain their source and version metadata. The server can quote these rates for an eligible, bundled SCE NBT26 interval and calculate separate import energy charges and **gross** export-credit accrual; this is not a full bill or an applied credit. `/api/economics/tariff-status` reports the verified inputs, while the five requested annual metrics remain **ESTIMATE — Unavailable** because the app lacks the customer's confirmed tariff and NBT26 eligibility, co-timed load and solar profiles, and complete billing/settlement inputs. An arbitrary `TARIFF_CATALOG_PATH` JSON file cannot self-certify SCE estimates; a complete tariff record must be reconciled with official sources and explicitly reviewed in code. See [utility economics methodology](docs/utility-economics-methodology.md) for exact sheet references, rates, source hashes, assumptions, and remaining gaps.
+M7B includes the supplied filed TOU-D-PRIME energy-rate snapshot effective June 25, 2026, and the 2026 hourly generation and delivery Energy Export Credit rows from the supplied NBT26 MIDAS file. Both retain their source and version metadata. The server can quote these rates for an eligible, bundled SCE NBT26 interval and calculate separate import energy charges and **gross** export-credit accrual; this is not a full bill or an applied credit. `/api/economics/tariff-status` reports the verified inputs, while the Economics panel shows one unavailable state for annual cost, solar value, grid import/export, and export credit because the app lacks the customer's confirmed tariff and NBT26 eligibility, co-timed load and solar profiles, and complete billing/settlement inputs. An arbitrary `TARIFF_CATALOG_PATH` JSON file cannot self-certify SCE estimates; a complete tariff record must be reconciled with official sources and explicitly reviewed in code. See [utility economics methodology](docs/utility-economics-methodology.md) for exact sheet references, rates, source hashes, assumptions, and remaining gaps.
 
 The checked-in 2026 export-rate module can be reproduced with `python3 server/scripts/importSceNbt26.py '/path/to/NBT26 MIDAS File.csv'`. The importer requires the exact reviewed source checksum and validates both hourly components, units, coverage, local labels, holidays, and daylight-saving transitions. A revised source file requires review before its checksum or rates are updated.
 
@@ -109,3 +129,9 @@ The local API routes are:
 | Preview production for edited assumptions | `POST /api/solar/estimate-preview` |
 
 The API validates the snapshot and rejects updates that try to move a run to another Property. Missing runs return 404. Annual tariff and economics output fields remain unsupported until the required customer eligibility, interval energy data, and billing rules are available. To run the optional database CRUD/integrity test after applying migrations, use `RUN_DB_TESTS=1 npm --prefix server run test -- analysisRuns.db.test.ts`.
+
+## Testing and interview notes
+
+Run `npm run typecheck`, `npm run lint`, `npm run test`, `npm run build`, and `npm run prisma:validate` from the repository root. For database-backed tests after applying migrations, run `RUN_DB_TESTS=1 npm --prefix server run test`. Automated frontend tests mock the application boundary around ArcGIS; automated backend tests mock PVWatts. A local browser walkthrough on September 25, 2026 verified stored geocoding, a subsequent registry hit, Map/3D, terrain and visual shadows, one live PVWatts estimate, and History save/view/edit; the temporary test records were removed. Repeat a browser walkthrough when service keys, SDK versions, or network conditions change. The production build may warn about the large ArcGIS SDK chunk; this warning alone does not mean the build failed.
+
+For a concise explanation of the spatial, modeling, lifecycle, and local-first choices, see [Esri interview notes](docs/esri-interview-notes.md).

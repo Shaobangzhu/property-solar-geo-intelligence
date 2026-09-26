@@ -126,6 +126,17 @@ describe("PropertyVisualization", () => {
     expect(await screen.findByTestId("arcgis-canvas")).toHaveAttribute("data-mode", "map");
   });
 
+  it("can switch modes after a map failure without carrying its error into 3D", async () => {
+    render(<PropertyVisualization property={property} />);
+    await screen.findByTestId("arcgis-canvas");
+    fireEvent.click(screen.getByRole("button", { name: "Simulate ArcGIS failure" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("map could not load");
+
+    fireEvent.click(screen.getByRole("button", { name: "3D" }));
+    expect(await screen.findByTestId("arcgis-canvas")).toHaveAttribute("data-mode", "3d");
+    expect(screen.queryByText(/3D scene could not load/)).not.toBeInTheDocument();
+  });
+
   it("tries a new property after a previous property's GIS failure", async () => {
     const { rerender } = render(<PropertyVisualization property={property} />);
     await screen.findByTestId("arcgis-canvas");

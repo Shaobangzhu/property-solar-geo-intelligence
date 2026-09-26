@@ -51,4 +51,20 @@ describe("property camera navigation", () => {
     expect(navigate).toHaveBeenCalledWith(second, expect.any(AbortSignal));
     navigation.dispose();
   });
+
+  it("ignores a late camera failure after the view is disposed", async () => {
+    let rejectMove: ((error: Error) => void) | undefined;
+    const onError = vi.fn();
+    const navigation = createPropertyNavigation(() => new Promise((_resolve, reject) => {
+      rejectMove = reject;
+    }), onError);
+
+    navigation.move(first);
+    await vi.waitFor(() => expect(rejectMove).toBeDefined());
+    navigation.dispose();
+    rejectMove?.(new Error("View was destroyed"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onError).not.toHaveBeenCalled();
+  });
 });

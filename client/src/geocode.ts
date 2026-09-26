@@ -82,7 +82,7 @@ export async function geocodeStoredAddress(
     .sort((a, b) => b.score - a.score);
   const best = candidates[0];
   if (!best || best.score < 90) {
-    throw new GeocodeError("no-match", "No precise residential address was found. Add city, state, and postal code, then try again.");
+    throw new GeocodeError("no-match", "No precise street address was found. Add city, state, and postal code, then try again.");
   }
   const rival = candidates.find((candidate) => candidate !== best
     && candidate.score >= best.score - 3

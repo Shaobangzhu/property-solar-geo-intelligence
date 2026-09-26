@@ -123,7 +123,9 @@ export function EconomicsPanel({ propertyId, snapshot, onChange, readOnly = fals
         : tariffStatus.configured || tariffStatus.verifiedRateInputs.length
           ? "Economics estimate unavailable" : "Tariff data not configured"}</strong>
       <p>{snapshotMode
-        ? "These values reflect what was saved with this analysis. Unavailable values were not calculated at save time."
+        ? economicsSnapshot
+          ? "These values reflect what was saved with this analysis. Unavailable values were not calculated at save time."
+          : "No annual financial estimate was saved. Monthly production and annual consumption cannot determine utility charges or export credits."
         : "Annual kWh and monthly production cannot determine self-consumption or hourly credits. A full estimate also needs the customer's billing details and applicable charge and settlement rules."}</p>
       {snapshotMode && tariffSnapshot && <p>Saved tariff reference: {tariffSnapshot.utility} {tariffSnapshot.planId}, {tariffSnapshot.version}.</p>}
       {!snapshotMode && tariffStatus && tariffStatus.verifiedRateInputs.length > 0 && <div>
@@ -133,20 +135,19 @@ export function EconomicsPanel({ propertyId, snapshot, onChange, readOnly = fals
           {` (from ${rate.effectiveFrom}${rate.effectiveTo ? ` until ${rate.effectiveTo} (exclusive)` : ""}; reviewed ${rate.verifiedAt})`}
         </li>)}</ul>
       </div>}
-      <div className="economics-metrics" aria-label="Unavailable estimates">
+      {snapshotMode && economicsSnapshot && <div className="economics-metrics" aria-label="Saved economics estimates">
         {unavailableMetrics.map(([label, unit, field]) => {
-          const value = snapshotMode ? economicsSnapshot?.[field] ?? null : null;
+          const value = economicsSnapshot[field];
           return <div className="economics-metric" key={label}>
             <span>ESTIMATE · {label}</span><strong>{value === null ? "Unavailable"
               : unit === "USD" ? usd.format(value) : kwh.format(value)}</strong><small>{unit}</small>
           </div>;
         })}
-        {snapshotMode && economicsSnapshot?.estimatedAnnualSavingsUsd !== null
-          && economicsSnapshot?.estimatedAnnualSavingsUsd !== undefined && <div className="economics-metric">
+        {economicsSnapshot.estimatedAnnualSavingsUsd !== null && <div className="economics-metric">
             <span>ESTIMATE · Estimated Annual Savings</span>
             <strong>{usd.format(economicsSnapshot.estimatedAnnualSavingsUsd)}</strong><small>USD</small>
           </div>}
-      </div>
+      </div>}
       {!snapshotMode && tariffStatus && <>
         <h3>What is needed</h3>
         <ul>{tariffStatus.missing.map((gap) => <li key={gap}>{gap}</li>)}</ul>

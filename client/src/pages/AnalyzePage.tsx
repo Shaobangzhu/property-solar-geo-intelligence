@@ -464,7 +464,7 @@ export function AnalyzePage() {
         <h1 id="analyze-title">{runId ? runMode === "edit" ? "Edit saved analysis" : "View saved analysis"
           : "Analyze property solar potential"}</h1>
         <p>{runId ? "This analysis preserves the assumptions and results from when it was saved."
-          : "Start by locating a residential property."}</p>
+          : "Start with the street address of the property you want to explore."}</p>
       </div>
       {runId ? <section className="search-panel" aria-label="Saved analysis controls">
         <p>{runMode === "edit" ? "Editing this saved run. Changes are kept here until you choose Save Changes."
@@ -486,26 +486,13 @@ export function AnalyzePage() {
         </section>}
       {runId && !runReady && !runError && <p role="status">Loading saved analysis…</p>}
       {runId && runError && !savedRun && <p role="alert" className="error-message">{runError}</p>}
-      {runReady && property && !viewingRun && <section className="search-panel" aria-label="Save analysis controls"
-        style={{ marginTop: "1rem" }}>
-        <button type="button" onClick={() => { void saveAnalysis(); }} disabled={savingRun || !canSave}>
-          {savingRun ? "Saving…" : editingRun ? "Save Changes" : "Save Analysis"}
-        </button>
-        {editingRun && <p className="muted">Apply roof or system edits in their panels, recalculate production, then Save Changes.</p>}
-        {(pendingPanelEdits.roof || pendingPanelEdits.solar || pendingPanelEdits.consumption)
-          && <p className="muted">Apply pending roof, system, or consumption form edits before saving this analysis.</p>}
-        {!canSave && !pendingPanelEdits.roof && !pendingPanelEdits.solar && !pendingPanelEdits.consumption
-          && <p className="muted">Complete the roof, solar system, production estimate, and load electricity inputs before saving.</p>}
-        {runNotice && <p role="status">{runNotice}</p>}
-        {runError && <p role="alert" className="error-message">{runError}</p>}
-      </section>}
       {runReady && <div className="analysis-layout">
         <PropertyVisualization property={property} roofGeometry={roofGeometry}
           canSketch={!viewingRun && Boolean(currentRoof && !currentRoof.loading && !currentRoof.error)}
           sunlight={sunlight} sunlightError={sunlightError} onSunlightError={setSunlightError}
           onRoofGeometryChange={updateRoofGeometry} onRoofSketchError={setRoofSketchError}
           roofSketchError={roofSketchError} />
-        <aside className="analysis-sections" aria-label="Analysis sections">
+        <section className="analysis-sections" aria-label="Analysis sections">
           <section className="section-card" aria-labelledby="property-summary-title">
             <h2 id="property-summary-title">Property Summary</h2>
             {property ? (
@@ -515,7 +502,8 @@ export function AnalyzePage() {
                   ? `${property.latitude.toFixed(6)}, ${property.longitude.toFixed(6)}`
                   : "Unavailable"}</p>
                 <OptionalDetails key={`${property.id}-${runId ?? "live"}`} property={property}
-                  onSaved={setProperty} readOnly={Boolean(runId)} />
+                  onSaved={(updated) => setProperty((previous) => previous?.id === updated.id ? updated : previous)}
+                  readOnly={Boolean(runId)} />
               </div>
             ) : <p>No property loaded.</p>}
           </section>
@@ -549,8 +537,20 @@ export function AnalyzePage() {
               tariffSnapshot={runId ? tariffDraft : undefined}
               economicsSnapshot={runId ? economicsDraft : undefined} />
           </RunControls>
-        </aside>
+        </section>
       </div>}
+      {runReady && property && !viewingRun && <section className="search-panel analysis-save-panel" aria-label="Save analysis controls">
+        <button type="button" onClick={() => { void saveAnalysis(); }} disabled={savingRun || !canSave}>
+          {savingRun ? "Saving…" : editingRun ? "Save Changes" : "Save Analysis"}
+        </button>
+        {editingRun && <p className="muted">Apply roof or system edits in their panels, recalculate production, then Save Changes.</p>}
+        {(pendingPanelEdits.roof || pendingPanelEdits.solar || pendingPanelEdits.consumption)
+          && <p className="muted">Apply pending roof, system, or consumption form edits before saving this analysis.</p>}
+        {!canSave && !pendingPanelEdits.roof && !pendingPanelEdits.solar && !pendingPanelEdits.consumption
+          && <p className="muted">Complete the roof, solar system, production estimate, and load electricity inputs before saving.</p>}
+        {runNotice && <p role="status">{runNotice}</p>}
+        {runError && <p role="alert" className="error-message">{runError}</p>}
+      </section>}
     </section>
   );
 }

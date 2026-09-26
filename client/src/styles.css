@@ -7,7 +7,12 @@ body { margin: 0; }
 nav { display: flex; gap: 1rem; } nav a { color: #506058; text-decoration: none; } nav a.active { color: #244d2c; font-weight: 700; }
 .page { margin: 0 auto; max-width: 1280px; padding: 2rem; }.page-heading h1 { margin: .2rem 0; }.page-heading p { color: #5d6a63; }.eyebrow { color: #426422 !important; font-size: .75rem; font-weight: 700; letter-spacing: .09em; }
 .search-panel, .section-card, .empty-state { background: #fff; border: 1px solid #dbe4db; border-radius: .75rem; padding: 1rem; }.search-row { display: flex; gap: .75rem; }.search-row input { border: 1px solid #b8c7ba; border-radius: .4rem; flex: 1; padding: .7rem; }.search-row button { background: #3b6d41; border: 0; border-radius: .4rem; color: white; padding: .7rem 1rem; }.search-row :disabled { cursor: not-allowed; opacity: .65; }.muted, .section-card p { color: #6a766f; font-size: .9rem; }
-.analysis-layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); margin-top: 1rem; }.analysis-sections { display: grid; gap: .75rem; }.section-card h2 { font-size: 1rem; margin: 0; }.section-card p { margin: .35rem 0 0; }.empty-state { margin-top: 1.5rem; text-align: center; padding: 3.5rem 1rem; }.empty-state h2 { margin-top: 0; }
+.analysis-layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); margin-top: 1rem; }
+.analysis-sections { align-items: start; display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.analysis-sections > .section-card:first-child, .analysis-sections > .historical-bills-panel,
+.analysis-sections > fieldset:last-child { grid-column: 1 / -1; }
+.analysis-save-panel { margin-top: 1rem; }
+.section-card h2 { font-size: 1rem; margin: 0; }.section-card p { margin: .35rem 0 0; }.empty-state { margin-top: 1.5rem; text-align: center; padding: 3.5rem 1rem; }.empty-state h2 { margin-top: 0; }
 .error-message { color: #a32626; }.property-address { font-weight: 650; }.details-form { border-top: 1px solid #dbe4db; display: grid; gap: .55rem; margin-top: 1rem; padding-top: .8rem; }.details-form label { display: grid; font-size: .85rem; gap: .2rem; }.details-form input { border: 1px solid #b8c7ba; border-radius: .35rem; font: inherit; padding: .45rem; width: 100%; }.details-form button { background: #3b6d41; border: 0; border-radius: .35rem; color: #fff; justify-self: start; padding: .6rem .8rem; }.details-form button:disabled { opacity: .6; }
 .geo-panel { background: #fff; border: 1px solid #dbe4db; border-radius: .75rem; min-width: 0; overflow: hidden; }
 .geo-toolbar { align-items: center; display: flex; gap: 1rem; justify-content: space-between; min-height: 76px; padding: .8rem 1rem; }
@@ -95,7 +100,7 @@ nav { display: flex; gap: 1rem; } nav a { color: #506058; text-decoration: none;
 .economics-metric small { color: #69766c; font-size: .66rem; }
 .geo-fallback { align-items: center; background: linear-gradient(135deg, #d9ead1, #eaf2e7); color: #355d3d; display: flex; flex-direction: column; justify-content: center; min-height: 510px; padding: 1.5rem; text-align: center; }
 .geo-fallback button { background: #3b6d41; border: 0; border-radius: .35rem; color: #fff; cursor: pointer; padding: .6rem .8rem; }
-@media (max-width: 760px) { .site-header { padding: 1rem; }.page { padding: 1rem; }.analysis-layout { grid-template-columns: 1fr; }.geo-canvas { height: 320px; }.geo-fallback { min-height: 320px; }.search-row { flex-direction: column; } }
+@media (max-width: 760px) { .site-header { padding: 1rem; }.page { padding: 1rem; }.analysis-sections { grid-template-columns: 1fr; }.geo-canvas { height: 320px; }.geo-fallback { min-height: 320px; }.search-row { flex-direction: column; } }
 @media (max-width: 420px) { .sunlight-shadow-panel .sunlight-controls { grid-template-columns: 1fr; } }
 @media (max-width: 540px) { .bill-modal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 

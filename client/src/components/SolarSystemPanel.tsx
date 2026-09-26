@@ -90,6 +90,7 @@ export function SolarSystemPanel({ propertyLoaded, system, loading, error, roofR
     {!propertyLoaded ? <p>Load a property to configure a solar system.</p>
       : loading ? <p role="status">Loading Solar System…</p>
         : error ? <div><p role="alert" className="error-message">{error}</p><button type="button" onClick={onRetry}>Retry loading</button></div>
-          : <SolarForm system={system} roofReady={roofReady} onSave={onSave} />}
+          : <>{!system && <p className="muted">No Solar System saved yet. These are editable starting assumptions.</p>}
+            <SolarForm system={system} roofReady={roofReady} onSave={onSave} /></>}
   </section>;
 }

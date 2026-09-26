@@ -109,6 +109,8 @@ export default function ArcgisCanvas({ mode, property, roofGeometry, canSketch,
   const roofGeometryRef = useRef(roofGeometry);
   roofGeometryRef.current = roofGeometry;
   const { id, displayAddress, latitude, longitude } = property;
+  const activeSketchPropertyIdRef = useRef<string | null>(null);
+  const lastSketchPropertyIdRef = useRef(id);
 
   useEffect(() => {
     const element = elementRef.current;
@@ -163,6 +165,20 @@ export default function ArcgisCanvas({ mode, property, roofGeometry, canSketch,
   }, [readyElement, canSketch]);
 
   useEffect(() => {
+    if (lastSketchPropertyIdRef.current === id) return;
+    lastSketchPropertyIdRef.current = id;
+    activeSketchPropertyIdRef.current = null;
+    const sketch = sketchRef.current;
+    if (!sketch) return;
+    void sketch.cancel().then(() => {
+      // Cancel may restore the old graphic; redraw the selected property's outline.
+      if (lastSketchPropertyIdRef.current === id && roofLayerRef.current) {
+        displayRoofGeometry(roofLayerRef.current, roofGeometryRef.current);
+      }
+    }).catch(() => undefined);
+  }, [id]);
+
+  useEffect(() => {
     if (!readyElement || mode !== "3d") return;
     const scene = readyElement as ArcgisScene;
     let time: ReturnType<typeof parseSunlightSettings>;
@@ -204,8 +220,8 @@ export default function ArcgisCanvas({ mode, property, roofGeometry, canSketch,
             geometry,
             totalDurationOptions: { mode: "continuous", color: [77, 54, 158, 0.55] },
           });
-          scene.analyses.add(analysis);
           shadowAnalysisRef.current = analysis;
+          scene.analyses.add(analysis);
         } else {
           analysis.set({
             date: time.calendarDate,
@@ -221,6 +237,9 @@ export default function ArcgisCanvas({ mode, property, roofGeometry, canSketch,
       }
       onSunlightErrorRef.current?.("");
     } catch (error) {
+      // A failed update must not leave a stale shadow overlay attached to the scene.
+      removeShadowAnalysis(scene, shadowAnalysisRef.current);
+      shadowAnalysisRef.current = null;
       onSunlightErrorRef.current?.(error instanceof Error ? error.message : "Sunlight visualization is unavailable.");
     }
   }, [readyElement, mode, sunlight, roofGeometry]);
@@ -267,10 +286,21 @@ export default function ArcgisCanvas({ mode, property, roofGeometry, canSketch,
           {canSketch && <arcgis-sketch ref={(element) => { sketchRef.current = element; }} slot="top-right"
             availableCreateTools={["polygon"]} creationMode="single" defaultGraphicsLayerDisabled
             onarcgisCreate={(event) => {
-              if (event.detail.state === "complete") acceptSketchGraphic(event.detail.graphic);
+              if (event.detail.state === "start") activeSketchPropertyIdRef.current = id;
+              if (event.detail.state === "cancel") activeSketchPropertyIdRef.current = null;
+              if (event.detail.state === "complete") {
+                const startedFor = activeSketchPropertyIdRef.current;
+                activeSketchPropertyIdRef.current = null;
+                if (startedFor === id) acceptSketchGraphic(event.detail.graphic);
+              }
             }}
             onarcgisUpdate={(event) => {
-              if (event.detail.state === "complete" && !event.detail.aborted) acceptSketchGraphic(event.detail.graphics[0]);
+              if (event.detail.state === "start") activeSketchPropertyIdRef.current = id;
+              if (event.detail.state === "complete") {
+                const startedFor = activeSketchPropertyIdRef.current;
+                activeSketchPropertyIdRef.current = null;
+                if (!event.detail.aborted && startedFor === id) acceptSketchGraphic(event.detail.graphics[0]);
+              }
             }}
             onarcgisDelete={() => onRoofGeometryChangeRef.current?.(null)} />}
         </arcgis-map>

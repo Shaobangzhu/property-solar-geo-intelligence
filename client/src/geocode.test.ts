@@ -37,7 +37,7 @@ describe("stored ArcGIS geocoding", () => {
       json: async () => ({ candidates: [] }),
     }));
     await expect(geocodeStoredAddress("Unknown address", "test-key"))
-      .rejects.toMatchObject({ kind: "no-match" } satisfies Partial<GeocodeError>);
+      .rejects.toMatchObject({ kind: "no-match", message: expect.stringContaining("street address") } satisfies Partial<GeocodeError>);
   });
 
   it("returns ambiguity for similarly ranked different addresses", async () => {

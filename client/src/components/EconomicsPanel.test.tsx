@@ -35,7 +35,7 @@ describe("EconomicsPanel", () => {
     expect(await screen.findByText("Tariff data not configured")).toBeInTheDocument();
     expect(screen.getByText("Estimate")).toBeInTheDocument();
     expect(screen.getByText(/Dollar bills do not reveal precise kWh consumption/)).toBeInTheDocument();
-    expect(screen.getAllByText("Unavailable")).toHaveLength(5);
+    expect(screen.queryByLabelText("Saved economics estimates")).not.toBeInTheDocument();
     expect(screen.getByText("Current filed import and export prices are unavailable.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "SCE Schedule NBT" })).toHaveAttribute("href", "https://www.sce.com/nbt");
     expect(screen.queryByText(/\$[0-9]/)).not.toBeInTheDocument();
@@ -74,15 +74,14 @@ describe("EconomicsPanel", () => {
     render(<EconomicsPanel propertyId="property-1" />);
     expect(await screen.findByText("Economics estimate unavailable")).toBeInTheDocument();
     expect(screen.getByText(/Import: Cal. PUC 91200-E/)).toBeInTheDocument();
-    expect(screen.getByText(/ESTIMATE · Estimated Annual Electricity Cost/)).toBeInTheDocument();
-    expect(screen.getAllByText("Unavailable")).toHaveLength(5);
+    expect(screen.queryByLabelText("Saved economics estimates")).not.toBeInTheDocument();
   });
 
   it("distinguishes a tariff-status request failure from absent tariff data", async () => {
     vi.mocked(loadTariffStatus).mockRejectedValue(new Error("offline"));
     render(<EconomicsPanel propertyId="property-1" />);
     expect(await screen.findByText("Tariff status unavailable")).toBeInTheDocument();
-    expect(screen.getAllByText("Unavailable")).toHaveLength(5);
+    expect(screen.queryByLabelText("Saved economics estimates")).not.toBeInTheDocument();
   });
 
   it("restores saved consumption and economics without requesting current property values", () => {
